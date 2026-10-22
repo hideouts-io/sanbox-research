@@ -1,0 +1,57 @@
+(version 1)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;;  THE VALUE OF THIS SANDBOX PROFILE IS PURELY DIAGNOSTIC.
+;;  SyncServices has historically run without being sandboxed at all.
+;;  This sandbox profile merely allows us to observe logging.
+;;  The bulk of this profile merely cuts down on log spam.
+;;  Most of the time, we don't even initialize a sandbox with this profile.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(allow (with report) default)
+(allow (with report) file-map-executable process-info* nvram*)
+(allow (with report) dynamic-code-generation)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;;  At runtime, we provide a value for a group container.
+;;  We direct file system operations into this container regardless of sandboxing.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(allow file-write* (subpath (param "com.apple.syncservices.container")))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;;  The remainder of this file cuts down on what gets logged.
+;;  These are all things we've always been able to do.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(allow distributed-notification-post)
+
+(allow file-read*)
+(allow file-write-data (literal "/dev/null"))
+
+(allow mach-lookup (global-name "com.apple.analyticsd"))
+(allow mach-lookup (global-name "com.apple.system.opendirectoryd.membership"))
+(allow mach-lookup (global-name "com.apple.trustd.agent"))
+
+(allow process-exec*)
+(allow process-fork)
+(allow process-info-pidinfo)
+
+(allow sysctl-read (sysctl-name "hw.memsize"))
+(allow sysctl-read (sysctl-name "hw.ncpu"))
+(allow sysctl-read (sysctl-name "kern.maxfilesperproc"))
+(allow sysctl-read (sysctl-name "kern.osproductversion"))
+(allow sysctl-read (sysctl-name "kern.secure_kernel"))
+
+(allow mach-lookup (global-name "com.apple.syncservices.SyncServer"))
+(allow mach-lookup (global-name "ISDServerIsRunningPort"))
+(allow mach-register (global-name "ISDServerIsRunningPort"))

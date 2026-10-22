@@ -1,0 +1,91 @@
+;;; Copyright (c) 2026 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+;;; macOS sandbox profile for the AppIntentsLiveEntityService XPC service.
+;;; It is installed to /System/Library/Sandbox/Profiles by the "Install macOS
+;;; Sandbox Profile" build phase and entered at runtime, as early as possible in
+;;; main.swift, via LNEnterSandbox("com.apple.appintents.LiveEntityService").
+(version 1)
+
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+
+(deny mach-priv-host-port)
+
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+(allow process-info-pidinfo)
+
+;; Our preference domain.
+(allow user-preference-read user-preference-write
+       (preference-domain "com.apple.appintents.LiveEntityService"))
+(allow user-preference-read
+       (preference-domain "kCFPreferencesAnyApplication"))
+
+;; Read/write access to a temporary directory.
+(allow file-read* file-write*
+       (subpath (param "TMPDIR"))
+       (subpath (param "DARWIN_CACHE_DIR")))
+
+;; ===== Custom Settings =====
+
+;; Live App Entity database (see Source/AppIntentsLiveEntityService/Database/Database.swift).
+(allow file-read* file-write*
+    (home-subpath "/Library/Application Support/com.apple.appintents.LiveEntityService"))
+
+;; Read/write cache access.
+(allow file-read* file-write*
+    (home-subpath "/Library/Caches/com.apple.appintents.LiveEntityService"))
+
+;; Allow read-only access to app / extension / framework bundles for entity resolution.
+(allow file-read*
+    (regex #"\.(app|appex|framework)($|/)"))
+
+;; Mach services this service talks to.
+;; Keep case-sensitive alphabetically sorted.
+;; - linkd.extension|mediator|registry: migrated from
+;;   com.apple.security.exception.mach-lookup.global-name in the embedded entitlements.
+;; - com.apple.runningboard: process-liveness checks (origin-PID eviction).
+;; - coreservices.launchservicesd / lsd.mapdb / linkd.autoShortcut: opening an LNConnection
+;;   to the owning app during rehydration (RehydrationCoordinator -> BulkEntityQueryExecutor
+;;   -> LNConnection.with). Captured by sbutil tracing of the macOS rehydration path.
+(allow mach-lookup
+    (global-name "com.apple.coreservices.launchservicesd"
+                 "com.apple.linkd.autoShortcut"
+                 "com.apple.linkd.extension"
+                 "com.apple.linkd.mediator"
+                 "com.apple.linkd.registry"
+                 "com.apple.lsd.mapdb"
+                 "com.apple.runningboard")
+    (global-name-prefix "com.apple.private.appintents.delegate."))

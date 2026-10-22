@@ -1,0 +1,73 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; Preference domain
+(allow user-preference-read user-preference-write
+		(preference-domain "com.apple.audio.AudioConverterService")
+)
+
+(allow user-preference-read
+		(preference-domain "kCFPreferencesAnyApplication")
+		(preference-domain "com.apple.coreaudio")
+)
+
+;; Reading preferences in direct mode
+(allow file-read*
+	(home-literal "/Library/Preferences/.GlobalPreferences.plist")
+	(home-literal "/Library/Preferences/.GlobalPreferences_m.plist")
+	(home-regex #"/Library/Preferences/ByHost/\.GlobalPreferences\.[^/]*\.plist$")
+	(home-literal "/Library/Preferences/com.apple.coreaudio.plist")
+	(home-literal "/Library/Preferences/com.apple.coremedia.plist")
+)
+
+;; Connecting to AudioComponentRegistrar to find codecs
+(allow mach-lookup
+	(global-name "com.apple.audio.AudioComponentRegistrar")
+	(global-name "com.apple.lskdd")
+	(global-name "com.apple.fairplayd.versioned")
+)
+	
+;; Using IOSurface for unilateral memory responsibility
+;; Communicate with IOAudioCodecs for decrypting audio
+(allow iokit-open-user-client
+       (iokit-user-client-class "IOSurfaceRootUserClient")
+       (iokit-user-client-class "IOAudioCodecsUserClient")
+)
+
+(allow iokit-open-service
+       (iokit-registry-entry-class "IOAudioCodecs")
+)
+       
+(allow file-map-executable
+	(subpath "/System/Library/Components/AudioCodecs.component/")
+	(subpath "/System/Library/Components/AudioDSP.component/")
+)

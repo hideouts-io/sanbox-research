@@ -1,0 +1,108 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.analyticsagent"))
+(allow user-preference-read
+    (preference-domain "kCFPreferencesAnyApplication"))
+(allow user-preference-read
+    (preference-domain "com.apple.gms.availability"))
+
+;; Read/write access to a temporary directory.
+(allow file-read* file-write*
+       (subpath (param "TMPDIR"))
+       (subpath (param "DARWIN_CACHE_DIR")))
+
+(allow file-read*
+    (literal "/private/var/db/eligibilityd/eligibility.plist")
+)
+
+;; Generative models availability reasons read access
+(allow mach-lookup
+    (global-name "com.apple.generativeexperiences.availabilityService")
+)
+
+;; BGSystemTaskScheduler access (for BackgroundSystemTasks framework)
+(allow mach-lookup
+    (global-name "com.apple.duetactivityscheduler")
+)
+
+;; Biome stream access (for App.InFocus app usage data)
+(allow mach-lookup
+    (global-name "com.apple.biome.access.user")
+    (global-name "com.apple.biome.access.system")
+    (global-name "com.apple.biome.compute.publisher.service.user")
+    (global-name "com.apple.biome.compute.publisher.service")
+    (global-name "com.apple.locationd.desktop.synchronous")
+    (global-name "com.apple.locationd.desktop.registration")
+    (global-name "com.apple.locationd.desktop.spi")
+    (global-name "com.apple.CoreLocation.agent")
+)
+
+;; Biome data directory access (read-only for App.InFocus stream)
+(allow file-read*
+    (home-subpath "/Library/Biome/streams/restricted/App.InFocus")
+)
+
+;; FairPlay access
+(allow mach-lookup
+    (global-name "com.apple.fpsd")
+    (global-name "com.apple.fairplayd")
+    (global-name "com.apple.fairplayd.xpc")
+)
+
+;; accountsd apple app store region read access
+(with-filter (process-path-regex "/analyticsagent$")
+  (allow mach-lookup
+    (global-name "com.apple.xpc.amsaccountsd")
+    (global-name "com.apple.servicesanalytics.xpc"))
+  (allow syscall-mach (machtrap-number MSC_thread_self_trap))
+  (allow syscall-mig (kernel-mig-routine mach_vm_remap_external)))
+
+(with-filter (require-any
+               (process-path-regex "/analyticsagent$")
+               (process-path
+                 "/System/Library/PrivateFrameworks/CoreAnalytics.framework/Support/analyticsagent"))
+  (allow mach-lookup (global-name "com.apple.accountsd.accountmanager"))
+  (allow syscall-mach (machtrap-number MSC_task_dyld_process_info_notify_get))
+  (allow syscall-mig (kernel-mig-routine mach_vm_copy))
+  (allow syscall-unix
+         (syscall-number SYS_pathconf)
+         (syscall-number SYS_proc_info_extended_id))
+  (allow system-mac-syscall
+         (require-all (mac-policy-name "Sandbox") (mac-syscall-number 4))))

@@ -1,0 +1,57 @@
+(version 1)
+(deny default)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+
+;;; initialize CF sandbox actions
+(corefoundation)
+
+;;; Homedir-relative path filters
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+;; Read/write access to required paths
+(allow file-read* file-write*
+    (home-subpath "/Library/Application Support/DifferentialPrivacy")
+    (home-subpath "/Library/Logs/PrivacyPreservingMeasurement")
+    (home-subpath "/Library/PPM/PAT"))
+
+(allow file-read* file-write*
+    (subpath (param "DARWIN_CACHE_DIR"))
+    (subpath (param "DARWIN_TEMP_DIR")))
+
+(allow file-read*
+    (subpath "/Library/Application Support/CrashReporter")
+    (subpath "/Library/Logs/DiagnosticReports"))
+
+;; Read access to /usr/libexec/dprivacyd
+(allow file-read*
+       (literal "/usr/libexec")
+       (literal "/usr/libexec/dprivacyd"))
+    
+;; compiled into release builds, only matches when the system is marked as internal
+(with-filter (require-not (system-attribute internal-build))
+    (allow file-read* (subpath "/AppleInternal")))
+
+(allow file-read-metadata)
+
+(allow user-preference*
+    (preference-domain "com.apple.DifferentialPrivacy"))
+
+;; Read access to other preference domains
+(allow user-preference-read
+    (preference-domain "kCFPreferencesAnyApplication")
+    (preference-domain "com.apple.AppleIntelligenceReport")
+    (preference-domain "com.apple.applicationaccess")
+    (preference-domain "com.apple.DPSubmissionService"))
+
+(allow mach-lookup
+    (global-name "com.apple.biome.access.user")
+    (global-name "com.apple.cloudd")
+    (global-name "com.apple.CrashReporterSupportHelper")
+    (global-name "com.apple.dprivacyd")
+    (global-name "com.apple.DPSubmissionService")
+    (global-name "com.apple.OSASubmission.client")
+    (global-name "com.apple.parsecd")
+    (global-name "com.apple.SystemConfiguration.configd"))

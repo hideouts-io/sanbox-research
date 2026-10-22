@@ -1,0 +1,148 @@
+;;; Copyright (c) 2023 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;; For Contacts
+(import "contacts.sb")
+(contacts-client (param "HOME") (param "TMPDIR"))
+
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+
+(allow process-info* (target self))
+
+;;;;
+;;;; Network
+;;;;
+(system-network)
+(allow network-outbound)
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; Generic use of CloudKit - mostly copied from common.sb on embedded platforms
+(allow user-preference-read
+    (preference-domain "com.apple.CloudKit"))
+    
+;; Preferences (read-write)
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.familycircled")
+    (preference-domain "familycircled")
+    (preference-domain "com.apple.familycircle")
+    (preference-domain "kCFPreferencesAnyApplication")
+)
+
+;; Filesystem read-write access
+(allow file-read* file-write*
+    (subpath (param "TMPDIR"))
+    (home-subpath "/Library/HTTPStorages/familycircled")
+    (home-subpath "/Library/Caches/FamilyCircle")
+    (home-subpath "/Library/Caches/familycircled")
+    (home-subpath "/Library/com.apple.familycircled")
+    (home-subpath "/Library/Application Support/familycircled")
+    (mount-relative-literal "/.TemporaryItems")
+    (mount-relative-subpath (string-append "/.TemporaryItems/folders." (param "UID")))
+)
+
+;; Security.framework read-write access
+(allow file-read*
+       (subpath (string-append (param "DARWIN_CACHE_DIR") "/mds"))
+)
+
+(allow file-read*
+    (subpath "/private/var/db/mds/system/")
+    (literal (param "SECURITY_MESSAGES_DIR"))
+)
+
+;; nsurlstoraged read-write access
+(allow file-read* file-write*
+    (subpath "/private/var/db/nsurlstoraged")
+    (extension "com.apple.sandbox.container")
+)
+
+;;;;
+;;;; Mach services
+;;;;
+(allow mach-lookup
+    (global-name "com.apple.accountsd.accountmanager")
+    (global-name "com.apple.ak.anisette.xpc")
+    (global-name "com.apple.apsd")
+    (global-name "com.apple.CARenderServer")
+    (global-name "com.apple.coreduetd.knowledge")
+    (global-name "com.apple.corefollowup.agent")
+    (global-name "com.apple.ScreenTimeAgent.setup")
+    (global-name "com.apple.containermanagerd")
+    (global-name "com.apple.coreservices.launchservicesd")
+    (global-name "com.apple.coreservices.quarantine-resolver")
+    (global-name "com.apple.dock.server")
+    (global-name "com.apple.familycircle.agent")
+    (global-name "com.apple.familynotification.agent")
+    (global-name "com.apple.identityservicesd.desktop.auth")
+    (global-name "com.apple.imagent.desktop.auth")
+    (global-name "com.apple.logind")
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.lsd.modifydb")
+    (global-name "com.apple.metadata.mds")
+    (global-name "com.apple.system.opendirectoryd.api")
+    (global-name "com.apple.tccd")
+    (global-name "com.apple.tccd.system")
+    (global-name "com.apple.windowserver.active")
+    (global-name "com.apple.xpc.amsaccountsd")
+    (global-name "com.apple.duetactivityscheduler")
+    (global-name "com.apple.identityservicesd.pds")
+    (global-name "com.apple.aa.daemon.xpc")
+    (global-name "com.apple.cloudd")
+    (global-name "com.apple.family.ageRange.xpc")
+    (global-name "com.apple.familycircled.settings")
+    (global-name "com.apple.familycircled.sharing")
+    (global-name "com.apple.familycircled.testing")
+    (global-name "com.apple.ak.auth.xpc")
+)
+
+;;;;
+;;;; IOKit
+;;;;
+
+(allow iokit-open
+    (iokit-user-client-class "RootDomainUserClient")
+)
+
+;;;;
+;;;; LSOpen
+;;;;
+(allow lsopen)
+
+
+(allow file-read* file-map-executable
+      (subpath "/System/Library/Accounts/ServiceOwners/IDSServiceOwner.bundle")
+      (subpath "/System/Library/Accounts/ServiceOwners/AACloudServiceOwner.bundle")
+      (subpath "/System/Library/Accounts/ServiceOwners/AMSMediaServiceOwner.bundle")
+)
+
+(allow process-info-pidinfo)

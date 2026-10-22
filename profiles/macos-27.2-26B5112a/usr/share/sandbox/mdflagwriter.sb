@@ -1,0 +1,19 @@
+;;;
+;;; Sandbox profile for mdflagwriter (Spotlight file metadata server worker)
+;;;
+;;; /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mdflagwriter
+;;;
+;;; Copyright (c) 2006–2026 Apple Inc. All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+
+(version 1)
+
+(deny default)
+
+(import "system.sb")
+
+(allow file-read* file-write* (extension "com.apple.spotlight.flagwriter.read-write"))

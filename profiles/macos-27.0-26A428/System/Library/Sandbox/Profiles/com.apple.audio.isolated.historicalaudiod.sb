@@ -1,0 +1,123 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+;; To debug , set the bellow to:
+;;(allow (with report) default)
+;;(allow (with report) file-map-executable process-info* nvram*)
+;;(allow (with report) dynamic-code-generation)
+;;
+;; then using: sudo log erase --all
+;; and: sbutil log show | grep historicalaudiod
+;; You can debug sandbox violations more easily
+;;
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+
+(allow process-info* (target self))
+
+(allow file-read*
+    (literal "/usr/libexec")
+    (literal "/usr/libexec/historicalaudiod")
+    (subpath "/Library/Preferences/Audio")
+    (literal "/Library/Preferences/.GlobalPreferences.plist")
+    (literal "/Library/Preferences/SystemConfiguration/preferences.plist")
+    (literal "/Library/Preferences/com.apple.security.plist")
+)
+
+(allow file-read-data
+    (literal "/Library/Preferences/com.apple.coremedia.plist")
+)
+
+(with-filter (system-attribute apple-internal)
+  (allow file-read-data
+      (literal "/usr/local/lib/libAudioDiagnostics.dylib"))
+)
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata
+    (subpath "/private/var/root")
+    (subpath "/Library/Preferences")
+    (subpath "/Library/Preferences/Audio")
+)
+
+(allow file-write*
+    (subpath "/Library/Preferences")
+    (subpath "/Library/Preferences/Audio")
+    (subpath "/Library/Preferences/Audio/Data")
+)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; Your preference domain
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.coreaudio")
+)
+
+;; Read/write access to a temporary directory.
+(with-filter (system-attribute apple-internal)
+  (allow file-read* file-write*
+         (subpath "/dev/exfiltration-adc-historicala")
+         (subpath (param "TMPDIR"))
+         (subpath (param "DARWIN_CACHE_DIR"))
+))
+
+;; Read / Execute access
+(allow file-read* file-map-executable
+       (subpath "/usr/libexec/historicalaudiod")
+       (subpath "/Library/Audio/Plug-Ins")
+       (subpath "/System/Library/Components/AudioDSP.component")
+)
+
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.coreaudio")
+)
+
+;; mach xpc service lookup
+(allow mach-lookup
+       (global-name "com.apple.audio.orchestrator.registrar.service")
+       (global-name "com.apple.audio.audiohald")
+       (global-name "com.apple.audio.AudioComponentRegistrar")
+       (global-name "com.apple.audioanalyticsd")
+)
+
+(allow ipc-posix-shm-read-data
+       (ipc-posix-name-regex #"^AudioIO")
+)
+
+(allow ipc-posix-shm-write-data
+       (ipc-posix-name-regex #"^AudioIO")
+)
+
+(allow ipc-posix-shm-read-metadata
+       (ipc-posix-name-regex #"^AudioIO")
+)
+
+;; Allow Microphone access
+(allow device-microphone)

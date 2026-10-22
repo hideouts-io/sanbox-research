@@ -1,0 +1,51 @@
+;;; Copyright (c) 2022 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; Read from the EcosystemAnalytics preference domain
+(allow user-preference-read
+    (preference-domain "com.apple.ecosystemanalytics")
+    (preference-domain "com.apple.ecosystemanalyticsd"))
+    
+;; For statically analyzing binaries 
+(allow file-read*
+    (subpath "/Applications")
+    (subpath "/Library")
+    (subpath "/usr/local")
+    (subpath "/opt")
+    (regex #"/Users/.*/Library/.*"))
+    
+;; For fetching microstackshots
+(allow file-read-data
+    (subpath "/private/var/db/systemstats")
+    (subpath "/private/var/db/spindump"))
+
+;; List of currently running Applications
+(allow mach-lookup
+    (global-name "com.apple.coreservices.launchservicesd"))
+
+;; Symbolication (uses mds to find binaries)
+(allow mach-lookup
+    (global-name "com.apple.coresymbolicationd")
+    (global-name "com.apple.metadata.mds")
+    (global-name "com.apple.lsd.mapdb"))
+
+;; Talking to ecosystemd
+(allow mach-lookup
+    (global-name "com.apple.ecosystem.rosetta"))

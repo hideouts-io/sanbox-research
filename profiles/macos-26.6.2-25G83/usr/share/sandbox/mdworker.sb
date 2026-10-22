@@ -1,0 +1,253 @@
+;;;
+;;; Sandbox profile for mdworker (Spotlight metadata server worker)
+;;;
+;;; Copyright (c) 2006–2026 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+
+(version 1)
+
+(import "system.sb")
+
+;;; =============================================================================
+;;; UTILITY FUNCTIONS
+;;; =============================================================================
+
+;; Parameter-based path construction helpers
+(define (param-regex param-name param-relative-regex)
+    (regex (string-append "^" (regex-quote (param param-name)) param-relative-regex)))
+
+(define (param-subpath param-name param-relative-subpath)
+    (subpath (string-append (param param-name) param-relative-subpath)))
+
+(define (param-literal param-name param-relative-literal)
+    (literal (string-append (param param-name) param-relative-literal)))
+
+;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (param-regex "_HOME" home-relative-regex))
+
+(define (home-subpath home-relative-subpath)
+    (param-subpath "_HOME" home-relative-subpath))
+
+(define (home-literal home-relative-literal)
+    (param-literal "_HOME" home-relative-literal))
+
+;;; =============================================================================
+;;; DENY RULES
+;;; =============================================================================
+
+;; Suppress sandbox violation logging
+(with-modifier (with no-report)
+
+    ;; Default denial policy
+    (deny default)
+
+    ;; Deny notifications
+    (deny darwin-notification-post distributed-notification-post)
+
+    ;; Deny IOKit calls
+    (deny iokit*)
+
+    ;; Deny process execution
+    (deny process-exec)
+
+    ;; Deny file writes (with specific exceptions below)
+    (deny file-write*)
+
+    ;; Deny file reads/writes (specific exceptions to allow rules)
+    (deny file-read*
+        (mount-relative-literal "/.DocumentRevisions-V100/staging")
+        (regex #"\.GlobalPreferences\.plist")
+        (regex #"\.GlobalPreferences\.[^\.]+\.plist"))
+
+    (deny file-write*
+        (regex #"\(A Document Being Saved By mdworker\)")
+        (regex #"Library/Keychains(/|$)"))
+
+    (deny file-read* file-write*
+        (subpath "/private/var/empty")
+        (subpath "/private/var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/0/com.apple.Spotlight"))
+
+    ;; Extended attributes denials
+    ;; FIXME: Should be removed once <rdar://problem/16329087> is fixed.
+    (deny file-write-xattr (xattr "com.apple.quarantine"))
+    ;; Reserve a namespace for additional protected extended attributes.
+    (if (defined? 'xattr-regex)
+        (deny file-read-xattr file-write-xattr (xattr-regex #"^com\.apple\.security\.private\."))
+        (deny file-read-xattr file-write-xattr (xattr #"^com\.apple\.security\.private\.")))
+
+    ;; Mach service lookup denials
+    (deny mach-lookup
+        (global-name "com.apple.audio.audiohald")
+        (global-name "com.apple.coresymbolicationd")
+        (global-name "com.apple.diagnosticd")
+        (global-name "com.apple.logd.events")
+        (global-name "com.apple.logd")
+        (global-name "com.apple.ls.boxd")
+        (global-name "com.apple.print.normalizerd"))
+
+)
+
+;;; =============================================================================
+;;; ALLOW RULES
+;;; =============================================================================
+
+;; Allow shm_open(2) for LaunchServices
+(allow ipc-posix-shm-read-data (ipc-posix-name-regex #"^/tmp/com\.apple\.csseed\.[0-9]+$"))
+
+;; Allow sysctl(2) to set P_CHECKOPENEVT flag
+(allow sysctl-write (sysctl-name "kern.check_openevt"))
+
+;; Allow fsctl(2) for APFS clone info
+(allow system-fsctl (fsctl-command (_IO "J" 14))) ;; _IOR('J', 14, apfs_clone_info_t)
+
+;; Allow querying whether a given directory looks like a LaunchServices package
+(if (defined? 'system-package-check)
+    (allow system-package-check))
+
+;; Allow setpriority(2)
+(allow system-sched)
+
+;; Allow reading user preferences
+(allow user-preference-read)
+
+;; Allow reading file metadata
+(allow file-read-metadata)
+
+;; File read allowances
+(allow file-read*
+
+    ;; Metadata importers
+    (regex #"\.mdimporter(/|$)")
+    (subpath "/Library/Spotlight")
+
+    ;; mdimport binary
+    (literal "/usr/bin/mdimport")
+
+    ;; Spotlight extensions
+    (extension "com.apple.spotlight-indexable")
+    (extension "com.apple.spotlight.importer.readonly")
+
+    ;; mdworker preferences
+    (regex #"/Library/Preferences/mdworker\.plist")
+
+    ;; mds preferences
+    (regex #"/Library/Preferences/com\.apple\.SpotlightServer\.plist")
+
+    ;; Other preferences
+    (literal "/Library/Preferences/com.apple.systemprefs.plist")
+    (literal "/Library/Preferences/com.apple.ViewBridge.plist")
+
+    ;; Volume root
+    (mount-relative-literal "/")
+
+    ;; Library directories
+    (subpath "/Library/Application Support/Apple/Fonts")
+    (subpath "/Library/Audio/Plug-Ins")
+    (subpath "/Library/Components")
+    (subpath "/Library/Fonts")
+    (subpath "/Library/Frameworks")
+    (subpath "/Library/Keychains")
+    (subpath "/Library/QuickTime")
+    (literal "/Library")
+    (literal "/Library/Application Support/CrashReporter/SubmitDiagInfo.domains")
+
+    ;; Application bundles and Desktop Services
+    (regex #"\.app(/$)")
+    (regex #"/\.DS_Store$")
+
+    ;; Container metadata
+    (regex #"/\.com\.apple\.containermanagerd\.metadata\.plist$")
+    (regex #"/Wrapper/[^/]+/Info\.plist$")
+
+    ;; Fonts
+    (mount-relative-regex #"^/Library/Fonts(/|$)")
+    (mount-relative-regex #"^/System/Library/Fonts(/|$)")
+
+    ;; For LaunchServices
+    (regex #"/Contents/PkgInfo$")
+
+    ;; Logging
+    (literal "/private/var/log/CDIS.custom")
+
+    ;; Security certificates
+    (subpath "/private/var/db/mds")
+    (literal "/private/var/db/DetachedSignatures")
+
+)
+
+;; Additional file read allowances (borrowed from application.sb and modified)
+(if (positive? (string-length (param "_HOME")))
+    (begin
+        (allow file-read* (literal (param "_HOME")))
+        (allow file-read* (home-subpath "/Library/Audio/Plug-Ins"))
+        (allow file-read* (home-subpath "/Library/Components"))
+        (allow file-read* (home-subpath "/Library/Keychains"))
+        (allow file-read* (home-subpath "/Library/Preferences/QuickTime Preferences"))
+        (allow file-read* (home-subpath "/Library/QuickTime"))
+        (allow file-read* (home-literal "/.CFUserTextEncoding"))
+        (allow file-read* (home-literal "/Library/Preferences/com.apple.HIToolbox.plist"))
+        (allow file-read* (home-literal "/Library/Preferences/com.apple.iApps.plist"))
+        (allow file-read* (home-literal "/Library/Preferences/mdworker.plist"))))
+
+(if (positive? (string-length (param "_LIBRARY")))
+    (begin
+        (allow file-read* (literal (param "_LIBRARY")))
+        (allow file-read* (param-subpath "_LIBRARY" "/Audio/Plug-Ins"))
+        (allow file-read* (param-subpath "_LIBRARY" "/Components"))
+        (allow file-read* (param-subpath "_LIBRARY" "/Keychains"))
+        (allow file-read* (param-subpath "_LIBRARY" "/Preferences/QuickTime Preferences"))
+        (allow file-read* (param-subpath "_LIBRARY" "/QuickTime"))
+        (allow file-read* (param-literal "_LIBRARY" "/Preferences/com.apple.HIToolbox.plist"))))
+
+(if (positive? (string-length (param "_APP_CONTAINER")))
+    (begin
+        (allow file-read* (subpath (param "_APP_CONTAINER")))))
+
+;; Manual mdimport command line tool access
+;; This is ONLY used by the manual 'mdimport' command when run from the command line
+;; This is a testing/development tool and it needs access to the paths provided on the command line
+;; It is not used operationally and all other instances of the sandbox are passed NULL for this value
+(if (positive? (string-length (param "_PARAM_PATH")))
+    (begin
+        (allow file-read* (subpath (param "_PARAM_PATH")))))
+
+;; Allow Apple-owned importers read/write access to TMP/CACHE directories (specific exception to global file write deny rule)
+(if (positive? (string-length (param "DARWIN_TEMP_DIR")))
+    (begin
+        (allow file-read* file-write* (subpath (param "DARWIN_TEMP_DIR")))))
+(if (positive? (string-length (param "DARWIN_CACHE_DIR")))
+    (begin
+        (allow file-read* file-write* (subpath (param "DARWIN_CACHE_DIR")))))
+
+;; Mach service lookup allowances
+(allow mach-lookup
+
+    ;; Spotlight services
+    (global-name "com.apple.metadata.mds")
+    (global-name "com.apple.metadata.mds.legacy")
+    (global-name "com.apple.spotlight.IndexAgent")
+    (global-name "com.apple.spotlightknowledged.importer")
+
+    ;; Other services
+    (global-name "com.apple.accountsd.accountmanager")
+    (global-name "com.apple.audio.AudioComponentRegistrar")
+    (global-name "com.apple.bird")
+    (global-name "com.apple.containermanagerd")
+    (global-name "com.apple.CoreServices.coreservicesd")
+    (global-name "com.apple.coreservices.quarantine-resolver")
+    (global-name "com.apple.DiskArbitration.diskarbitrationd")
+    (global-name "com.apple.distributed_notifications@1v3")
+    (global-name "com.apple.distributed_notifications@Uv3")
+    (global-name "com.apple.FontObjectsServer")
+    (global-name "com.apple.fonts")
+    (global-name "com.apple.launchservices.mapdb")
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.lsd.modifydb")
+    (global-name "com.apple.SystemConfiguration.configd")
+
+)

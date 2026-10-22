@@ -1,0 +1,19 @@
+{
+  "architecture": null,
+  "attribution": "declared-unverified",
+  "collectedAt": null,
+  "coverage": "recorded-paths-only",
+  "evidence": [],
+  "id": "macos-10.14-beta-10-18A384a",
+  "limitations": [
+    "Architecture and acquisition date were not recorded; catalog generation time is not acquisition time.",
+    "Only recorded paths are represented; original exclusions, unreadable files, and acquisition completeness were not recorded.",
+    "Saved-byte consistency does not establish Apple authenticity, effective policy, or runtime authorization.",
+    "Community source revision is recorded; OS-build attribution and source authenticity are not independently established by hashes."
+  ],
+  "roots": [
+    "System/Library/Sandbox/Profiles",
+    "usr/share/sandbox"
+  ],
+  "sourceKind": "community-snapshot"
+}

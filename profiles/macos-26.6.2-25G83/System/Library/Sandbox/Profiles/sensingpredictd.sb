@@ -1,0 +1,21 @@
+;; Copyright (c) 2024 Apple Inc.  All Rights reserved.
+;;
+(version 1)
+(deny default)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+
+(allow file-read-data
+    (subpath "/System/Library/CoreServices")
+ )
+
+(allow mach-lookup
+    (global-name "com.apple.AudioAccessoryServices")
+    (global-name "com.apple.bluetooth.xpc")
+)
+
+(allow user-preference-read user-preference-write
+    preference-domain "com.apple.SensingPredict")
+)
+

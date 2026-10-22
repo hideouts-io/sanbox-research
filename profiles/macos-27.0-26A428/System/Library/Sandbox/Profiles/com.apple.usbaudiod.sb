@@ -1,0 +1,49 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+(allow user-preference-read user-preference-write
+       (preference-domain "com.apple.usbaudiod")
+       (preference-domain "com.apple.usbaudiod.defaults")
+       (preference-domain "kCFPreferencesAnyApplication"))
+
+;; Allow frameworks access to the daemon bundle identifier via -[NSBundle bundleIdentifier]
+(allow file-read-data
+    ;; Allow access to any files under this path.
+    (subpath (param "BUNDLE_PATH"))
+    (literal "/Library/Preferences/com.apple.usbaudiod.defaults.plist")
+)
+
+;; Access to USB devices and to the power management notifications
+(allow iokit-open-user-client
+    (iokit-user-client-class "AppleUSBHostFrameworkDeviceClient")
+    (iokit-user-client-class "AppleUSBHostFrameworkInterfaceClient")
+    (iokit-user-client-class "RootDomainUserClient")
+)
+
+;; Communication with Core Audio to host the driver
+(allow mach-lookup
+    (global-name "com.apple.audio.driver-registrar")
+)

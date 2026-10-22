@@ -1,0 +1,40 @@
+;;;
+;;; Sandbox profile for mdworker (Spotlight metadata server worker)
+;;; with additional rules for Mail.mdimporter (Mail metadata importer)
+;;;
+;;; Copyright (c) 2006–2025 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+
+(version 1)
+
+(import "mdworker.sb")
+
+;; Allow Mail importer to read mail messages anywhere
+(allow file-read*
+    (regex #"/Library/Mail(/|$)")
+    (regex #"\.emlxpart$"))
+
+(if (positive? (string-length (param "_HOME")))
+    (begin
+        (allow file-read* (home-subpath "/Library/Mail"))))
+
+(if (positive? (string-length (param "_LIBRARY")))
+    (begin
+        (allow file-read* (param-subpath "_LIBRARY" "/Mail"))))
+
+(if (positive? (string-length (param "_MAIL")))
+    (begin
+        (allow file-read* (subpath (param "_MAIL")))))
+
+(if (positive? (string-length (param "_MAIL_V2")))
+    (begin
+        (allow file-read* (subpath (param "_MAIL_V2")))))
+
+;; Allow Mail importer to write to ~/Library/Logs/mdworker
+(if (positive? (string-length (param "_HOME")))
+    (begin
+        (allow file-write* (home-subpath "/Library/Logs/mdworker"))))

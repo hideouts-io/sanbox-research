@@ -1,0 +1,40 @@
+(version 1)
+(deny default)
+;;(allow default (with report))
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+
+;;; initialize CF sandbox actions
+(corefoundation)
+
+(allow file*
+    (subpath (param "DARWIN_TEMP_DIR"))
+    (subpath (param "DARWIN_CACHE_DIR"))
+    (subpath "/private/var/db/DifferentialPrivacy")
+    (subpath "/private/var/log/PrivacyPreservingMeasurement"))
+
+(allow file-read*
+    (subpath "/private/var/root"))
+
+;; compiled into release builds, only matches when the system is marked as internal
+(with-filter (require-not (system-attribute internal-build))
+    (allow file-read* (subpath "/AppleInternal")))
+
+;; Read access to /usr/libexec/dprivacyd
+(allow file-read*
+       (literal "/usr/libexec")
+       (literal "/usr/libexec/dprivacyd"))
+    
+(allow file-read-metadata)
+
+(allow user-preference*
+    (preference-domain "com.apple.DifferentialPrivacy"))
+
+;; Read access to other preference domains
+(allow user-preference-read
+    (preference-domain "kCFPreferencesAnyApplication"))
+
+(allow mach-lookup
+    (global-name "com.apple.dprivacyd")
+    (global-name "com.apple.SystemConfiguration.configd"))

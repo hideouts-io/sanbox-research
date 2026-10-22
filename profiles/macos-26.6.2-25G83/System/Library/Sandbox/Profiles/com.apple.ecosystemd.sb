@@ -1,0 +1,63 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;;  Read from the Ecosystem preference domain
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.ecosystem")
+    (preference-domain "com.apple.ecosystemd")
+    (preference-domain "com.apple.ecosystem.policy"))
+
+;; For reading and writing the database
+(allow file-read* file-write*
+    (extension "com.apple.sandbox.application-group"))
+
+;; For reading bundle and codesign info from common bundle types, command line tools and system plugin locations
+(allow file-read*
+    (regex #"\.(app|bundle|colorPicker|driver|prefPane|plugin)$")
+    (regex #"\.(app|bundle|colorPicker|driver|prefPane|plugin)/Contents$")
+    (regex #"\.(app|bundle|colorPicker|driver|prefPane|plugin)/Contents/MacOS/.*")
+    (regex #"\.(app|bundle|colorPicker|driver|prefPane|plugin)/Contents/Info.plist$")
+    (regex #"\.(app|bundle|colorPicker|driver|prefPane|plugin)/Contents/Resources/.*")
+    (subpath "/usr")
+    (subpath "/sbin")
+    (subpath "/bin")
+    (subpath "/Library/Printers/")
+    (subpath "/Library/Audio/Plug-Ins/")
+    (regex #"/Users/.*/Library/Audio/Plug-Ins/.*")
+    (subpath "/Library/Screen Savers/")
+    (subpath "/Library/Security/SecurityAgentPlugins/"))
+
+;; Read Trial assets
+(allow file-read*
+    (subpath "/Library/Trial"))
+
+;; Talking to EcosystemAnalytics, container manager, activity scheduler, and gamePolicy
+(allow mach-lookup
+    (global-name "com.apple.ecosystem.rosetta")
+    (global-name "com.apple.ecosystem.agent.service")
+    (global-name "com.apple.ecosystem.agent.notifications")
+    (global-name "com.apple.duetactivityscheduler")
+    (global-name "com.apple.containermanagerd")
+    (global-name "com.apple.gamepolicyd.app.privileged")
+    (global-name "com.apple.gamepolicyd.app"))
+
+;; Distributed Notifications
+(allow distributed-notification-post)

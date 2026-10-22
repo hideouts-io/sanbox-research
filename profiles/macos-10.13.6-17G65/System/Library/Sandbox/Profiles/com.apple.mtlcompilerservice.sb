@@ -1,0 +1,13 @@
+(version 1)
+
+(deny default)
+(debug deny)
+
+(import "system.sb")
+
+(allow file-read-metadata
+    (subpath "/Library")
+    (subpath "/System"))
+
+(allow file-read*
+    (subpath "/Library/GPUBundles"))

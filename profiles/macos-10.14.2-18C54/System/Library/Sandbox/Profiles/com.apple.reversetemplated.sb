@@ -1,0 +1,21 @@
+(version 1)
+(import "system.sb")
+
+(allow file-read-metadata
+    (mount-relative-literal "/") ;; -[NSURL getResourceValue:forKey:error:]
+    (literal "/Library/Caches/com.apple.DiagnosticReporting.HasBeenAppleInternal")
+)
+
+(allow mach-lookup
+    (global-name "com.apple.tccd") ;; DataDetectorsCore
+    (global-name "com.apple.CoreServices.coreservicesd") ;; -[NSURL getResourceValue:forKey:error:]
+    (global-name "com.apple.mobileassetd") ;; to get access to the reverse templates
+    (global-name "com.apple.parsecd") ;; to get flight information from Parsec (for flight template-less)
+)
+
+(allow user-preference-read (preference-domain "com.apple.suggestions"))
+
+;; SGAsset
+(allow file-read* (require-all
+    (subpath "/Library/Assets")
+    (extension "com.apple.assets.read")))

@@ -1,0 +1,22 @@
+(version 1)
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(allow default)
+
+(deny file-write*)
+(allow file-write*
+    (require-all
+        (file-attribute apfs-preboot-volume)
+        (require-any
+            (mount-relative-regex #"^/[^/]+/cryptex1/")
+            (mount-relative-regex #"^/[^/]+/downlevel($|/)")))
+    (subpath (param "TMPDIR"))
+    (home-subpath "/Library/Caches/com.apple.MobileSoftwareUpdate.CryptegraftService")
+    (home-subpath "/Library/HTTPStorages/com.apple.MobileSoftwareUpdate.CryptegraftService")
+    (literal "/System/Volumes/Update/restore.log")
+    (subpath "/private/var/tmp/SoftwareUpdateCore")
+    (subpath "/private/var/db/softwareupdate"))

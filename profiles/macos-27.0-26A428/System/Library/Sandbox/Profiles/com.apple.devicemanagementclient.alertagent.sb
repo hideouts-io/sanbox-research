@@ -1,0 +1,134 @@
+;; com.apple.devicemanagementclient.alertagent.sb
+;;
+;; Sandbox profile for the LaunchPolicyAlertAgent.
+;; This agent receives XPC from managedeventsd (root) and presents
+;; NSAlert windows to the console user when a blocked app is launched.
+;;
+(version 1)
+(deny default)
+
+;; ─── Baseline Imports ───────────────────────────────────────────────────────
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+(system-graphics)
+
+;; ─── Hardening ──────────────────────────────────────────────────────────────
+(deny dynamic-code-generation)
+
+;; ─── Process Lifecycle ──────────────────────────────────────────────────────
+(allow process-exec*
+    (literal "/System/Library/CoreServices/DeviceManagementClient/LaunchPolicyAlertAgent.app/Contents/MacOS/LaunchPolicyAlertAgent"))
+
+(allow process-fork)
+(allow file-map-executable)
+(allow signal (target self))
+
+;; ─── IPC for resolving login items ──────────────────────────────────────────
+(allow mach-lookup
+    (global-name "com.apple.backgroundtaskmanagement")
+    (global-name "com.apple.backgroundtaskmanagement.sfl")
+    (global-name "com.apple.backgroundtaskmanagementagent"))
+
+;; ─── Process Introspection ──────────────────────────────────────────────────
+;; Self-introspection
+(allow process-info* (target self))
+
+;; Cross-process introspection - required for NSXPCConnection
+;; entitlement / signature checks on the peer.
+(allow process-info-codesignature)
+(allow process-info-pidinfo)
+
+;; ─── NSAlert / AppKit GUI Rendering ─────────────────────────────────────────
+(allow iokit-get-properties)
+
+(allow mach-lookup
+    ;; Window server & compositing
+    (global-name "com.apple.windowserver")
+    (global-name "com.apple.windowserver.active")
+    (global-name "com.apple.CARenderServer")
+    (global-name "com.apple.window_proxies")
+    (global-name "com.apple.windowmanager.server")
+
+    ;; NSApp.activate / window management
+    (global-name "com.apple.dock.server")
+    (global-name "com.apple.dock.fullscreen")
+
+    ;; Font rendering
+    (global-name "com.apple.fonts")
+    (global-name "com.apple.FontObjectsServer")
+
+    ;; Text services (keyboard input on OK button)
+    (global-name "com.apple.tsm.uiserver"))
+
+;; Core Animation shared memory for compositing
+(allow ipc-posix-shm-read*
+    (ipc-posix-name-regex #"^/tmp/com\.apple\.csseed\.[0-9]+$"))
+
+;; ─── XPC Service Registration ───────────────────────────────────────────────
+(allow mach-register
+    (global-name "com.apple.devicemanagementclient.alertagent"))
+
+;; ─── NSWorkspace (Name & Icon Resolution) ───────────────────────────────────
+;; urlForApplication(withBundleIdentifier:) and icon(forFile:)
+(allow mach-lookup
+    (global-name "com.apple.coreservices.launchservicesd")
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.lsd.modifydb")
+    (global-name "com.apple.iconservices")
+    (global-name "com.apple.iconservices.store"))
+
+;; Read app bundles for Info.plist, localized strings, and .icns resources
+(allow file-read*
+    (subpath "/Applications")
+    (subpath "/System/Applications")
+    (subpath "/System/Library/CoreServices")
+    (subpath "/System/Library/Frameworks")
+    (subpath "/System/Library/PrivateFrameworks")
+    (subpath "/Library/Application Support")
+    (regex #"\.app/Contents/Info\.plist$")
+    (regex #"\.app/Contents/Resources/"))
+
+(allow file-read-metadata)
+
+;; ─── Foundation / System Services ───────────────────────────────────────────
+(allow mach-lookup
+    ;; Logging & telemetry
+    (global-name "com.apple.logd")
+    (global-name "com.apple.logd.events")
+    (global-name "com.apple.analyticsd")
+    (global-name "com.apple.diagnosticd")
+    
+    ;; Preferences
+    (global-name "com.apple.cfprefsd.daemon")
+    (global-name "com.apple.cfprefsd.agent")
+    
+    ;; Notifications & events
+    (global-name "com.apple.system.notification_center")
+    (global-name "com.apple.distributed_notifications@1v3")
+    (global-name "com.apple.coreservices.appleevents")
+    
+    ;; Pasteboard (AppKit touches this during alert setup)
+    (global-name "com.apple.pasteboard.1")
+    
+    ;; Security / trust (LS bundle validation)
+    (global-name "com.apple.SecurityServer")
+    (global-name "com.apple.trustd.agent")
+    
+    ;; TCC & lifecycle
+    (global-name "com.apple.tccd")
+    (global-name "com.apple.tccd.system")
+    (global-name "com.apple.runningboard"))
+
+;; ─── Preferences ────────────────────────────────────────────────────────────
+(allow user-preference-read
+    (preference-domain "kCFPreferencesAnyApplication")
+    (preference-domain "com.apple.universalaccess")
+    (preference-domain "com.apple.HIToolbox")
+    (preference-domain "com.apple.LaunchServices")
+    (preference-domain ".GlobalPreferences"))
+
+;; ─── Per-agent temp + Darwin user cache (created by _set_user_dir_suffix) ───
+(allow file-read* file-write*
+    (subpath (param "TMPDIR"))
+    (subpath (param "DARWIN_CACHE_DIR")))

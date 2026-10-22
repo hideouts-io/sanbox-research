@@ -1,0 +1,248 @@
+;;
+;; com.apple.omniSearch.searchtoold - sandbox profile
+;;
+;; Custom seatbelt profile for searchtoold. Applied via sandbox_init_with_parameters
+;; in main() (see Sandbox.swift) — NOT auto-applied by launchd via the
+;; seatbelt-profiles entitlement (that pattern is iOS-only on macOS).
+;;
+
+(version 1)
+
+(deny default (with telemetry))
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(define (home-subpath p) (subpath (string-append (param "HOME") p)))
+
+;; Process / codesign basics
+(allow process-info* (target self))
+(allow process-info-codesignature)
+
+;; Metadata reads anywhere — needed for realpath(3), symlink walking, and TCC
+;; gate-checks on paths *before* we know whether we'll touch contents.
+(allow file-read-metadata)
+
+;; Content reads. TCC is the actual gate; seatbelt just has to not block first.
+;;
+;; Scope:
+;;   ~/Documents, ~/Desktop, ~/Downloads        — per-folder TCC services
+;;   /Users/Shared                              — shared user content, no TCC prompt
+;;   /Volumes                                   — external/removable drives
+;;                                                (TCC: SystemPolicyRemovableVolumes)
+;;   /private/var/automount, /Network           — automounted network shares
+;;                                                (TCC: SystemPolicyNetworkVolumes)
+(allow file-read* file-search
+    (subpath (param "HOME"))
+    (subpath "/Users/Shared")
+    (subpath "/Volumes")
+    (subpath "/private/var/automount")
+    (subpath "/Network"))
+
+;; Vend read-only sandbox extensions to entitled XPC peers.
+(allow file-issue-extension
+    (extension-class "com.apple.app-sandbox.read"))
+
+;; Reads under /private/var/folders — FeatureStore biomeStream events are
+;; persisted under per-user folders that no other rule covers.
+(allow file-read*
+    (subpath "/private/var/folders"))
+
+;; System data paths consumed at runtime. Mirrors the absolute-path and
+;; home-relative-path read-only exceptions declared in
+;; searchtoold-entitlements.plist (and several adjacent paths the same
+;; subsystems read alongside the declared ones — e.g. networkd settings,
+;; the countryd cache, the AppleInternal RequiredAssets_root bundle that
+;; backs Spotlight's entity-type registry).
+(allow file-read*
+    (subpath "/AppleInternal")
+    (subpath "/Library/Trial")
+    (subpath "/Library/UnifiedAssetFramework")
+    (subpath "/Library/Preferences")
+    (subpath "/Library/Assistant/SiriVocabulary")
+    (subpath "/Library/Containers/com.apple.managedcorespotlightd/EnabledIndexes")
+    (subpath "/private/var/MobileAsset")
+    (subpath "/System/Library/PreinstalledAssetsV2")
+    (subpath "/private/var/db/assetsubscriptiond")
+    (subpath "/private/var/db/com.apple.countryd"))
+
+;; Writes: only our own state + the standard tmp/cache dirs.
+(allow file-write*
+    (subpath "/private/var/folders")
+    (home-subpath "/Library/Application Support/com.apple.omniSearch.searchtoold")
+    ;; Espresso / CoreML compiled-model bundle cache. The query-time
+    ;; embedding model (used by Spotlight to classify hits into
+    ;; FileEntity / NoteEntity / etc.) silently produces nothing if the
+    ;; cache can't be created, so file results never get the FileEntity
+    ;; tag and disappear from agentic-search output.
+    (home-subpath "/Library/Caches/com.apple.omniSearch.searchtoold")
+    ;; Mirrors home-relative-path read-write exceptions in
+    ;; searchtoold-entitlements.plist.
+    (home-subpath "/Library/Logs/com.apple.FeatureStore")
+    (home-subpath "/Library/Shortcuts")
+    ;; Siri Entity Matcher SKIT index updates performed during query-time
+    ;; entity matching.
+    (home-subpath "/Library/Assistant/SiriVocabulary/Modules/SEM"))
+
+;; Photos PFCachingArchiveIndex prebuilt-index caches.
+;; Write access required for PhotoKit Search on macOS (rdar://183156896)
+(allow file-write*
+    (require-all
+        (home-subpath "/Library/Caches")
+        (regex #"/(PFSceneTaxonomyData|PFContentClassificationTaxonomyData|PFTimeZoneData|PFSceneGeographyData)[^/]*\.index")))
+
+;; IPC primitives
+(allow ipc-posix-shm)
+(allow distributed-notification-post)
+
+;; Mach lookups. Mirrors the union of:
+;;   - foundation services every macOS daemon needs (TCC, SC, opendirectory,
+;;     LaunchServices, container/account/FileProvider resolution).
+;;   - every entry in `com.apple.security.temporary-exception.mach-lookup
+;;     .global-name` in searchtoold-entitlements.plist (the daemon authors'
+;;     declared dependency surface).
+;; Keep this list synchronized with that entitlements key when adding or
+;; removing capabilities.
+(allow mach-lookup
+    ;; --- macOS daemon foundation (not declared in entitlements) ---
+    (global-name "com.apple.tccd")
+    (global-name "com.apple.SecurityServer")
+    (global-name "com.apple.SystemConfiguration.configd")
+    (global-name "com.apple.system.opendirectoryd.api")
+    (global-name "com.apple.CoreServices.coreservicesd")
+    (global-name "com.apple.coreservices.launchservicesd")
+    (global-name "com.apple.distributed_notifications@1v3")
+    ;; LaunchServices sub-databases. Spotlight queries LS for the bundle
+    ;; type/icon registry; if either is unreachable the query path produces
+    ;; a nil type and trips an NSInternalInconsistencyException in Spotlight.
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.lsd.modifydb")
+    ;; App-group container resolution (e.g. group.com.apple.spotlight) and
+    ;; account / FileProvider-managed entity resolution.
+    (global-name "com.apple.containermanagerd")
+    (global-name "com.apple.accountsd.accountmanager")
+    (global-name "com.apple.AddressBook.ContactsAccountsService")
+    (global-name "com.apple.commerce")
+    (global-name "com.apple.CoreAuthentication.agent")
+    (global-name "com.apple.FileProvider")
+    ;; Spotlight stack sub-services consumed as a client.
+    (global-name "com.apple.spotlight.SearchAgent")
+    (global-name "com.apple.spotlight.IndexAgent")
+    ;; iTunes / Apple-account XPC declared as a feature entitlement
+    ;; (`com.apple.itunescloudd.xpc`) but reachable as a mach-lookup name.
+    (global-name "com.apple.itunescloudd.xpc")
+
+    ;; --- searchtoold-entitlements.plist
+    ;;     `com.apple.security.temporary-exception.mach-lookup.global-name`
+    ;;     (preserve order to make diffing against the plist trivial) ---
+    (global-name "com.apple.networkserviceproxy.fetch-token")
+    (global-name "com.apple.mobileasset.autoasset")
+    (global-name "com.apple.assistant.cdm")
+    (global-name "com.apple.photos.service")
+    (global-name "com.apple.photoanalysisd")
+    (global-name "com.apple.apsd")
+    (global-name "com.apple.cloudd")
+    (global-name "com.apple.CompanionLink")
+    (global-name "com.apple.intelligenceplatform.EntityResolution")
+    (global-name "com.apple.intelligenceplatform.Feedback")
+    (global-name "com.apple.intelligenceplatform.View")
+    (global-name "com.apple.locationd.synchronous")
+    (global-name "com.apple.email.maild")
+    (global-name "com.apple.parsecd")
+    (global-name "com.apple.modelmanager")
+    (global-name "com.apple.mediaanalysisd.service.public")
+    (global-name "com.apple.searchd")
+    (global-name "com.apple.searchd.background")
+    (global-name "com.apple.linkd.registry")
+    (global-name "com.apple.contacts.account-caching")
+    (global-name "com.apple.biome.access.user")
+    (global-name "com.apple.modelcatalog.catalog")
+    (global-name "com.apple.siri.uaf.service")
+    (global-name "com.apple.mobileassetd.v2")
+    (global-name "com.apple.generativeexperiences.availabilityService")
+    (global-name "com.apple.managedcorespotlightd")
+    (global-name "com.apple.diagnosticpipeline.service")
+    (global-name "com.apple.omniSearch.search")
+    (global-name "com.apple.omniSearch.answerSynthesis")
+    (global-name "com.apple.siri.analytics.assistant")
+    (global-name "com.apple.generativesearch.server.search")
+    (global-name "com.apple.mediaanalysisd.analysis")
+    (global-name "com.apple.tokengeneration")
+    (global-name "com.apple.CarPlayApp.service")
+    (global-name "com.apple.proactive.PersonalizationPortrait.Topic.readOnly")
+    (global-name "com.apple.proactive.ActionPrediction.predictions")
+    (global-name "com.apple.dmd.policy")
+    (global-name "com.apple.siri.uaf.subscription.service")
+    (global-name "com.apple.triald.namespace-management")
+    (global-name "com.apple.homed.xpc")
+    (global-name "com.apple.mediaanalysisd.embeddingstore")
+
+    ;; --- FileBrowsingServices display-path resolution (rdar://172193879) ---
+    ;; The FileBrowsingServices.DefaultPathResolver reaches its embedded XPC service
+    ;; (com.apple.FileBrowsingServices.PathResolver) to resolve user-facing display paths
+    ;; ("On My iPad › …") for file search results. Without this the resolver silently
+    ;; degrades to URL-fallback and displayPath is left nil.
+    (global-name "com.apple.FileBrowsingServices.PathResolver")
+
+    ;; --- Spotlight file-search (mdquery / CSFilesSearchQuery) ---
+    ;; rdar://177972614 — without these, CSFilesSearchQuery fails immediately
+    ;; with "could not start mdquery" / CSSearchQueryErrorDomain/-2000 and no
+    ;; file results reach the OmniSearch response. The legacy variant is the
+    ;; backward-compatibility XPC name still consulted by older callers in the
+    ;; metadata stack.
+    (global-name "com.apple.metadata.mds")
+    (global-name "com.apple.metadata.mds.legacy")
+    ;; --- Misc daemon-foundation services discovered under deny-default ---
+    (global-name "com.apple.AddressBook.abd")
+    (global-name "com.apple.bird")
+    (global-name "com.apple.coreservices.quarantine-resolver")
+    (global-name "com.apple.DiskArbitration.diskarbitrationd")
+    (global-name "com.apple.contacts.poster.api")
+    (global-name "com.apple.contactsd.persistence")
+    (global-name "com.apple.dnssd.service")
+    (global-name "com.apple.mediaremoted.xpc")
+    (global-name "com.apple.mobile.keybagd.UserManager.xpc")
+    (global-name "com.apple.mobile.usermanagerd.xpc")
+    (global-name "com.apple.pluginkit.pkd")
+    (global-name "com.apple.powerlog.plxpclogger.xpc")
+    (global-name "com.apple.proactive.appDirectory")
+    (global-name "com.apple.Spotlight.Preferences")
+    (global-name "com.apple.usymptomsd"))
+
+;; Routing / notification kernel sockets — touched by Network framework
+;; on every outbound connection.
+(allow system-socket
+    (require-all (socket-domain AF_SYSTEM) (socket-type SOCK_DGRAM)))
+
+;; Outbound HTTPS for SAM / Pegasus global search and other cloud paths.
+;; `ip` covers both TCP and UDP — needed because some HTTPS-port traffic
+;; flows through QUIC (UDP/443).
+(allow network-outbound
+    (remote ip "*:443"))
+
+;; IOSurface client used indirectly by Espresso / ANE inference (the
+;; cross-encoder / embedding models hit this path during ranking).
+(allow iokit-open-user-client
+    (iokit-user-client-class "IOSurfaceRootUserClient"))
+
+;; Allow searchtoold to persist its own preferences (e.g. cross-encoder
+;; thresholds, embedding-bypass thresholds — see Search+ContentFilter docs).
+(allow user-preference-write
+    (preference-domain "com.apple.omnisearch.searchtoold"))
+
+;; mDNSResponder UDS (paired with com.apple.dnssd.service above).
+(allow network-outbound (literal "/private/var/run/mDNSResponder"))
+
+;; CrashReporter diagnostic-history (read-only): Spotlight / mdquery touches
+;; this for telemetry on startup.
+(allow file-read*
+    (literal "/Library/Application Support/CrashReporter/DiagnosticMessagesHistory.plist"))
+
+;; CFNetwork loads the eTLD/public-suffix list from nsurlstoraged.
+(allow file-read*
+    (literal "/private/var/db/nsurlstoraged/dafsaData.bin"))
+
+;; AppleKeyStore IOKit client — touched indirectly by KeyChain / TCC code
+;; paths Spotlight consults during query setup.
+(allow iokit-open-user-client
+    (iokit-user-client-class "AppleKeyStoreUserClient"))

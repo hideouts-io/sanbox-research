@@ -1,0 +1,69 @@
+;;; Copyright (c) 2024 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 2)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;;;
+;;; Syscall
+;;;
+(allow syscall-mach
+       (machtrap-number MSC_mach_msg2_trap
+                        MSC_thread_get_special_reply_port
+                        MSC__kernelrpc_mach_port_construct_trap
+                        MSC__kernelrpc_mach_port_deallocate_trap
+                        MSC__kernelrpc_mach_vm_deallocate_trap
+                        MSC__kernelrpc_mach_vm_map_trap
+                        MSC__kernelrpc_mach_vm_protect_trap
+                        MSC__kernelrpc_mach_port_mod_refs_trap
+                        MSC__kernelrpc_mach_port_destruct_trap)
+        (syscall-number MSC_mach_generate_activity_id))
+
+(allow syscall-unix
+        (syscall-number SYS___disable_threadsignal)
+        (syscall-number SYS___pthread_sigmask)
+        (syscall-number SYS___pthread_kill)
+        (syscall-number SYS___semwait_signal_nocancel)
+        (syscall-number SYS_kevent_id)
+        (syscall-number SYS_kevent_qos)
+        (syscall-number SYS_ulock_wake)
+        (syscall-number SYS_bsdthread_ctl)
+        (syscall-number SYS_thread_selfid)
+        (syscall-number SYS_sigsuspend_nocancel)
+        (syscall-number SYS_geteuid)
+        (syscall-number SYS_workq_open)
+        (syscall-number SYS_getrlimit)
+        (syscall-number SYS_fstat64)
+        (syscall-number SYS_bsdthread_create)
+        (syscall-number SYS_ulock_wait)
+        (syscall-number SYS_ulock_wait2)
+        (syscall-number SYS_workq_kernreturn)
+        (syscall-number SYS_fileport_makefd)
+        (syscall-number SYS_madvise)
+        (syscall-number SYS_lseek)
+        (syscall-number SYS_pread)
+        (syscall-number SYS_pwrite)
+        (syscall-number SYS_ftruncate)
+        (syscall-number SYS_kdebug_trace64)
+        (syscall-number SYS_bsdthread_terminate)
+        (syscall-number SYS_getentropy)
+        (syscall-number SYS_sigprocmask)
+        (syscall-group-pthread-locks))
+
+
+(allow process-info* (target self))
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)

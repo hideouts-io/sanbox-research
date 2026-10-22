@@ -1,0 +1,77 @@
+;;; Copyright (c) 2026 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+(allow mach-task-name)
+
+(allow mach-lookup
+    (global-name
+        "com.apple.apsd"
+        "com.apple.cloudd"
+        "com.apple.ManagedSettingsAgent"
+        "com.apple.accountsd.accountmanager"
+        "com.apple.duetactivityscheduler"
+        "com.apple.SystemConfiguration.configd"
+    )
+)
+
+(allow process-info-pidinfo)
+(allow process-info* (target self))
+
+(allow process-info-codesignature)
+
+(allow file-read-metadata)
+
+(allow file-read* file-write*
+    (subpath (param "TMPDIR"))
+    (subpath (param "DARWIN_CACHE_DIR"))
+    (subpath (param "DARWIN_USER_DIR"))
+)
+
+(allow file-read* file-write*
+    (home-subpath "/Library/Application Support/com.apple.remotemanagementd/")
+)
+
+(allow file-read*
+    (literal "/Library/Preferences/SystemConfiguration/preferences.plist")
+)
+
+(allow file-read* file-write* (mount-relative-regex #"^/\.TemporaryItems(/|$)"))
+
+(allow user-preference-read
+    (preference-domain
+        "kCFPreferencesAnyApplication"
+        "com.apple.ScreenTimeSettingsAgent"
+        "com.apple.CloudKit"
+    )
+)
+
+(allow user-preference-write
+    (preference-domain
+        "com.apple.ScreenTimeSettingsAgent"
+    )
+)

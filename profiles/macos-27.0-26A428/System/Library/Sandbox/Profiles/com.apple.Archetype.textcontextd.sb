@@ -1,0 +1,108 @@
+;;; Copyright (c) 2025 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(import "contacts.sb")
+(contacts-client (param "HOME") (param "TMPDIR"))
+(corefoundation)
+
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+(allow process-info* (target self))
+(allow process-info-dirtycontrol (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; Specific preference domain for textcontextd
+(allow user-preference-read user-preference-write
+       (preference-domain "com.apple.Archetype"))
+
+;; Mail "Personalize Smart Replies" consent setting (group.com.apple.mail), read by the Mail
+;; Smart Reply profile vending gate. On macOS this custom (deny default) sandbox must explicitly
+;; allow the container-manager lookup, the preference domain, and the container plist read; on iOS
+;; the app-group entitlement alone grants access. (rdar://181509020)
+(allow mach-lookup
+    (global-name "com.apple.containermanagerd")
+)
+(allow user-preference-read
+    (preference-domain "group.com.apple.mail")
+)
+(allow file-read*
+    (home-literal "/Library/Group Containers/group.com.apple.mail/Library/Preferences/group.com.apple.mail.plist"))
+
+;; Read/write access to a temporary directory.
+(allow file-read* file-write*
+       (subpath (param "TMPDIR"))
+       (subpath (param "DARWIN_CACHE_DIR"))
+       (mount-relative-literal "/.TemporaryItems"))
+
+;; GenerativeModels
+(allow mach-lookup
+    (global-name "com.apple.biome.access.user")
+)
+
+;; Generative Learning Platform
+(allow mach-lookup
+    (global-name "com.apple.generativesearch.server.search")
+)
+
+;; Contacts
+(allow mach-lookup
+    (global-name "com.apple.tccd")
+    (global-name "com.apple.AddressBook.ContactsAccountsService")
+    (global-name "com.apple.accountsd.accountmanager")
+    (global-name "com.apple.contactsd.persistence")
+    (global-name "com.apple.contacts.account-caching")
+    (global-name "com.apple.corerecents.recentsd")
+)
+
+;; Spotlight Query
+(allow mach-lookup
+    (global-name "com.apple.managedcorespotlightd")
+    (global-name "com.apple.spotlight.IndexAgent")
+    (global-name "com.apple.spotlight.SearchAgent")
+    (global-name "com.apple.photos.service")
+)
+
+;; rdar://176917818
+(allow mach-lookup
+    (global-name "com.apple.servicesanalytics.xpc"))
+
+(allow file-issue-extension
+    (extension-class "com.apple.managedcorespotlightd.read-write")
+)
+
+;; Consume sandbox extensions
+(with-filter (extension "com.apple.app-sandbox.read")
+    (allow file-read*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read")))
+(with-filter (extension "com.apple.app-sandbox.read-write")
+    (allow file-read* file-write*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")))

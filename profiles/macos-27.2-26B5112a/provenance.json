@@ -1,0 +1,21 @@
+{
+  "architecture": "arm64",
+  "attribution": "declared-unverified",
+  "collectedAt": "2026-10-19T07:27:20.757415+00:00",
+  "coverage": "recorded-paths-only",
+  "evidence": [],
+  "id": "macos-27.2-26B5112a",
+  "limitations": [
+    "Product version27.2, build26B5112a and arm64 were observed locally with sw_vers and uname during acquisition; no independent immutable Apple host attestation was obtained.",
+    "Only .sb paths under the two standard profile roots were recorded. Other sandbox policy locations, compiled policies and effective process policies are outside this capture.",
+    "Source path set, dereferenced byte hashes, sizes and symbolic-link targets matched independent inventories before and after copying; this is a point-in-time consistency check, not atomic acquisition or proof of authenticity.",
+    "Release channel is unknown; the capture script stable default was corrected before catalog generation.",
+    "Acquisition time is the local UTC clock observation, not independent timestamp attestation. Private raw files, host inventories and independently retained saved-tree manifests remain outside this repository.",
+    "Saved-byte consistency and derived textual markers do not establish Apple authenticity, safety, loaded policy, effective authorization or runtime behavior."
+  ],
+  "roots": [
+    "System/Library/Sandbox/Profiles",
+    "usr/share/sandbox"
+  ],
+  "sourceKind": "local-capture"
+}

@@ -1,0 +1,33 @@
+{
+  "architecture": null,
+  "attribution": "conflicting",
+  "collectedAt": null,
+  "coverage": "recorded-paths-only",
+  "evidence": [
+    {
+      "buildVersion": "21G115",
+      "productVersion": "12.6",
+      "sha256": "0f45d9940400136074f72ec3238c07e6dc6ddbe90e3614b3207d161f3167d548",
+      "url": "https://raw.githubusercontent.com/corecryptics/MacOSReports/e91132f209ae756b0036f1bfbff9effaf9386b82/diagnose-fu/sw_vers.txt"
+    },
+    {
+      "buildVersion": "21G72",
+      "productVersion": "12.5",
+      "sha256": "1cd92e4699532c6429930e3204febd9991143dea4901243ba018eb49a4d06a84",
+      "url": "https://raw.githubusercontent.com/corecryptics/MacOSReports/e91132f209ae756b0036f1bfbff9effaf9386b82/SystemReports/SPSoftwareDataType.spx"
+    }
+  ],
+  "id": "macos-12.6-21G115",
+  "limitations": [
+    "Architecture and acquisition date were not recorded; catalog generation time is not acquisition time.",
+    "Only recorded paths are represented; original exclusions, unreadable files, and acquisition completeness were not recorded.",
+    "Saved-byte consistency does not establish Apple authenticity, effective policy, or runtime authorization.",
+    "Community source revision is recorded; OS-build attribution and source authenticity are not independently established by hashes.",
+    "Same-commit version reports conflict: 12.6/21G115 versus 12.5/21G72. The exact profile build is unresolved. Original identifiers are preserved as declarations only.",
+    "This snapshot contains no usr/share/sandbox records."
+  ],
+  "roots": [
+    "System/Library/Sandbox/Profiles"
+  ],
+  "sourceKind": "community-snapshot"
+}

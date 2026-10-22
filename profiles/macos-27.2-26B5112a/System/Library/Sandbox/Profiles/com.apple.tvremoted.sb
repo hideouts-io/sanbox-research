@@ -1,0 +1,97 @@
+;;; Copyright (c) 2026 Apple Inc.  All Rights reserved.
+;;;
+;;; Sandbox profile for tvremoted
+
+(version 1)
+
+;; (allow (with report) default)
+;; (allow (with report) file-map-executable iokit-get-properties process-info* nvram*)
+;; (allow (with report) dynamic-code-generation)
+
+(deny default)
+
+(deny mach-priv-host-port)
+
+(import "com.apple.corefoundation.sb")
+(import "system.sb")
+
+(corefoundation)
+
+;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+(allow file-write*
+    (home-subpath "/Library/Caches")
+    (home-subpath "/Library/Keychains")
+    (regex #"^/Library/Keychains/System.keychain")
+    (literal "/private/var/db/mds/system/mds.lock")
+)
+
+(allow network*)
+
+(allow user-preference-read
+    (literal "/Library/Preferences/SystemConfiguration/preferences.plist")
+    (preference-domain "com.apple.homed")
+    (preference-domain "com.apple.tvremotecore")
+    (preference-domain "kCFPreferencesAnyApplication")
+)
+
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.tvremoted")
+)
+
+(allow file-read-data
+    (subpath "/usr/libexec")
+)
+
+(allow file-read* file-write*
+    (extension "com.apple.sandbox.application-group"))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+(allow mach-lookup
+    (global-name "com.apple.CompanionLink")
+    (global-name "com.apple.homed.xpc")
+    (global-name "com.apple.server.bluetooth.le.att.xpc")
+    (global-name "com.apple.containermanagerd")
+    (global-name "com.apple.bluetooth.xpc")
+    (global-name "com.apple.mediaremoted.xpc")
+    (global-name "com.apple.assistant.settings")
+    (global-name "com.apple.rapport")
+    (global-name "com.apple.wifi.manager")
+    (global-name "com.apple.accountsd.accountmanager")
+    (global-name "com.apple.tccd")
+    (global-name "com.apple.adid")
+    (global-name "com.apple.tccd.system")
+    (global-name "com.apple.SystemConfiguration.configd")
+)
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+(allow process-info-pidinfo)
+(allow process-info* (target self))
+
+;; Read/write access to a temporary directory.
+;; (allow file-read* file-write*
+;;       (subpath (param "TMPDIR"))
+;;       (subpath (param "DARWIN_CACHE_DIR")))
+
+;; Read/write cache access
+;; TODO: Replace ${PRODUCT_BUNDLE_IDENTIFIER} with the actual bundle identifier.
+;; (let ((cache-path-filter (home-subpath "/Library/Caches/${PRODUCT_BUNDLE_IDENTIFIER}")))
+;;  (allow file-read* file-write* cache-path-filter)
+;;  (allow file-issue-extension
+;;    (require-all
+;;      (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")
+;;      cache-path-filter)))

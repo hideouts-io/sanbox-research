@@ -1,0 +1,177 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 3)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata file-test-existence
+    (home-subpath "/")
+    (literal "/private")
+    (literal "/private/etc")
+    (literal "/private/var")
+    (literal "/private/var/db")
+    (subpath "/private/var/db/assetsubscriptiond")
+    (subpath "/private/var/folders/zz")
+    (literal "/private/var/tmp")
+    (subpath (param "HOME"))
+    (subpath "/System/Library/AssetsV2")
+    (literal "/usr")
+    (literal "/usr/libexec")
+    (literal "/usr/libexec/assetsubscriptiond")
+    (literal "/usr/libexec/siriknowledged")
+)
+
+(allow file-test-existence
+    (literal "/etc/localtime")
+    (literal "/etc/master.passwd")
+    (literal "/etc/passwd")
+    (literal "/Library")
+    (literal "/Library/Application Support")
+    (literal "/Library/Application Support/CrashReporter")
+    (literal "/Library/Preferences/com.apple.networkd.plist")
+    (subpath "/private")
+    (literal "/Users")
+    (literal "/usr/libexec/Base.lproj") ;; so as to not pollute the logs with silly deny entries
+    (literal "/usr/libexec/English.lproj") ;; so as to not pollute the logs with silly deny entries
+    (subpath "/var/folders/zz")
+    (literal "/var/root")
+    (literal "/var/root/Library")
+    (literal "/var/root/Library/Caches")
+    (subpath "/var/root/Library/Trial")
+    (subpath "/var/root/Library/Caches/UnifiedAssetFramework")
+)
+
+(allow file-read-data
+    (literal "/Library/Preferences/com.apple.networkd.plist")
+    (literal "/private/var/db/eligibilityd/eligibility.plist")
+    (subpath "/private/var/db/assetsubscriptiond")
+    (subpath "/System/Library/AssetsV2")
+    (literal "/usr/libexec")
+    (subpath "/usr/libexec/assetsubscriptiond")
+)
+
+;; allow access to our NSTemporary() directory:
+(with-filter (uid 0)
+    (allow file-read* file-write* file-test-existence
+        (regex #"^/private/var/folders/zz/[^/]+/T/com.apple.assetsubscriptiond/TemporaryItems/.*")
+    )
+)
+
+;; Allow file creation access to ~root/Library/Caches/ so we can make ~root/Library/Caches/UnifiedAssetFramework
+(allow file-read* file-write-create file-test-existence
+    ;; note: no trailing slash, we only want this to affect the Caches dir
+    (literal "/private/var/root/Library/Caches")
+)
+
+;; Allow full access to our space
+(allow file-read* file-write* file-test-existence
+    (subpath "/private/var/db/assetsubscriptiond")
+    (subpath "/private/var/root/Library/Caches/UnifiedAssetFramework")
+)
+
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.assetsubscriptiond")
+    (preference-domain "com.apple.UnifiedAssetFramework")
+    (preference-domain "kCFPreferencesAnyApplication")  ;; for GMS availability information
+)
+
+(allow file-read* file-write*
+    (home-subpath "/Library/UnifiedAssetFramework")  ;; so we can read the user's existing DB
+)
+
+(allow managed-preference-read user-preference-read
+    (preference-domain "com.apple.gms.availability")
+    (preference-domain "com.apple.networkd")
+    (preference-domain "kCFPreferencesAnyApplication")
+)
+
+(allow file-read* file-test-existence
+    (literal "/Library/Application Support/CrashReporter/DiagnosticMessagesHistory.plist")
+    (subpath "/Library/Trial")
+    (subpath "/private/var/MobileAsset")
+    (subpath "/private/var/db/timezone")
+    (subpath "/var/db/timezone")
+)
+
+(allow file-read* file-test-existence
+    (literal "/AppleInternal")
+    (subpath "/AppleInternal/Library/UnifiedAssetFramework")
+)
+
+(allow iokit-open-service
+    (iokit-user-client-class "AppleKeyStore")
+)
+;; needed for biome framework to check device lock state:
+(allow iokit-open-user-client
+    (iokit-user-client-class "AppleKeyStoreUserClient")
+)
+
+(allow mach-lookup
+    (global-name "com.apple.biome.access.system")
+    (global-name "com.apple.biome.compute.publisher.service")
+    (global-name "com.apple.coreservices.quarantine-resolver")
+    (global-name "com.apple.feedbacklogger")
+    (global-name "com.apple.generativeexperiences.availabilityService")
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.lsd.modifydb")
+    (global-name "com.apple.mobileasset.autoasset")
+    (global-name "com.apple.mobileassetd.v2")
+    (global-name "com.apple.system.opendirectoryd.api")
+    (global-name "com.apple.symptom_diagnostics")
+    (global-name "com.apple.SystemConfiguration.configd")
+    (global-name "com.apple.triald.namespace-management")
+)
+
+(allow necp-client-open)
+
+;; allow all mach and unix syscalls
+(allow syscall-mach)
+(allow syscall-unix)
+
+(allow system-fcntl
+    (fcntl-command
+        F_DUPFD_CLOEXEC
+        F_GETCONFINED
+        F_GETPROTECTIONCLASS
+        F_NOCACHE
+        F_OFD_GETLK
+        F_OFD_SETLK
+        F_SETCONFINED
+    )
+)
+
+(with-filter (mac-policy-name "Sandbox")
+    (allow system-mac-syscall
+        (mac-syscall-number 4)  ;; SYSCALL_CONTAINER
+        (mac-syscall-number 6)
+    )
+)
+
+(allow system-necp-client-action)

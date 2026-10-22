@@ -1,0 +1,24 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable iokit-get-properties process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;; mach xpc service lookup
+(allow mach-lookup
+       (global-name "com.apple.audio.isolated.historicalaudio.client.service")
+       (global-name "com.apple.windowserver.active")
+       (global-name "com.apple.tccd.system")
+)

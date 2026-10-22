@@ -1,0 +1,234 @@
+;;; Copyright (c) 2021 Apple Inc.  All Rights reserved.
+
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+;; Unsuffixed-user-directory-relative path filters
+(define (unsuffixed-userdir-subpath unsuffixed-userdir-relative-subpath)
+    (subpath (string-append (param "UNSUFFIXED_USERDIR") unsuffixed-userdir-relative-subpath)))
+
+(allow process-info* (target self))
+(allow process-info-dirtycontrol (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; For resolving the executable path of clients via proc_pidpath (static code signing fallback).
+(allow process-info-pidinfo)
+
+;; For reading application bundles during static code signing verification of XPC clients.
+;; SecStaticCodeCreateWithPath reads the executable and code signature from disk.
+(allow file-read*
+    (subpath "/Applications/")
+    (home-subpath "/Applications/")
+    (subpath "/AppleInternal/Applications/"))
+
+;;; Preferences - daemon and framework configuration
+(allow user-preference-read user-preference-write
+       (preference-domain "com.apple.siriappintentsd")
+       (preference-domain "NSGlobalDomain")
+)
+
+(allow managed-preference-read (preference-domain "kCFPreferencesAnyApplication"))
+
+(allow user-preference-read
+    (preference-domain "kCFPreferencesAnyApplication")
+    (preference-domain "com.apple.assistant")
+    (preference-domain "com.apple.GenerativeFunctions.GenerativeFunctionsInstrumentation")
+    (preference-domain "com.apple.gms.availability")
+    (preference-domain "com.apple.assistant.backedup")
+)
+
+;; ChatGPT setting
+(allow user-preference-read
+    (preference-domain "com.apple.siri.generativeassistantsettings")
+)
+
+;; ModelCatalog and asset framework configuration
+(allow user-preference-read
+    (preference-domain "com.apple.UnifiedAssetFramework")
+    (preference-domain "com.apple.modelcatalog.ajax")
+)
+
+;; ModelCatalog
+(allow file-read*
+    (subpath "/private/var/db/com.apple.modelcatalog/sideload/")
+    (subpath "/System/Library/AssetsV2/locks/com.apple.UnifiedAssetFramework/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_FM_GenerativeModels/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_FM_Overrides/purpose_auto/")
+    (subpath "/System/Library/PreinstalledAssetsV2/RequiredByOs/com_apple_MobileAsset_UAF_FM_GenerativeModels/")
+    (subpath "/System/Library/PreinstalledAssetsV2/RequiredByOs/com_apple_MobileAsset_UAF_FM_Overrides/")
+)
+
+;;; GPU/ML Access
+;; Keychain/Data Protection — required by CoreML model decryption
+(allow iokit-open
+    (iokit-user-client-class "AppleKeyStoreUserClient")
+)
+
+;; GPU and accelerator clients
+(allow iokit-open
+    (iokit-user-client-class "AGXDeviceUserClient")
+    (iokit-user-client-class "AGXCommandQueue")
+    (iokit-user-client-class "AGXDevice")
+    (iokit-user-client-class "AGXSharedUserClient")
+    (iokit-user-client-class "IOAccelContext")
+    (iokit-user-client-class "IOAccelDevice")
+    (iokit-user-client-class "IOAccelSharedUserClient")
+    (iokit-user-client-class "IOAccelSubmitter2")
+    (iokit-user-client-class "IOAccelContext2")
+    (iokit-user-client-class "IOAccelDevice2")
+    (iokit-user-client-class "IOAccelSharedUserClient2")
+    (iokit-user-client-class "IOSurfaceRootUserClient")
+)
+
+;; Allow loading of GPU extensions
+(allow file-map-executable
+    (subpath "/System/Library/Extensions"))
+
+;;; Apple Neural Engine (ANE) Access
+;; Allows access to Apple's dedicated neural processing hardware
+;; ANE mach-lookup is in the Core Services block below
+(allow iokit-open-service
+    (iokit-user-client-class "AppleVirtIONeuralEngineDevice"
+                             "H11ANEIn")
+)
+(allow iokit-open
+    (iokit-user-client-class "AppleVirtIONeuralEngineDeviceUserClient")
+    (iokit-user-client-class "H11ANEInDirectPathClient")
+)
+
+;;; Core Services - Biome, IntelligenceFlow, ModelManager, Siri
+(allow mach-lookup
+    ;; Biome event streaming - feature store and Apple Intelligence metrics
+    (global-name "com.apple.biome.access.user")
+    (global-name "com.apple.biome.access.system")
+    (global-name "com.apple.biome.compute.source.user")
+    (global-name "com.apple.biome.compute.publisher.service.user")
+    (global-name "com.apple.biome.compute.publisher.service")
+
+    ;; IntelligenceFlow - core framework for daemon operations
+    (global-name "com.apple.intelligenceflow.context")
+    (global-name "com.apple.intelligenceflow.uiContext")
+    (global-name "com.apple.intelligenceflow.querydecoration")
+    (global-name "com.apple.intelligenceflow.toolbox")
+
+    ;; Model and asset management - used for ML inference
+    (global-name "com.apple.modelmanager")
+    (global-name "com.apple.modelcatalog.catalog")
+    (global-name "com.apple.siri.uaf.service")
+
+    ;; Siri and Assistant services
+    (global-name "com.apple.assistant.settings")
+    (global-name "com.apple.siri.location")
+
+    ;; Neural Engine access
+    (global-name "com.apple.appleneuralengine")
+
+    ;; SpotlightKnowledge — internal-only fetchSpotlightMetrics endpoint
+    (global-name "com.apple.managedcorespotlightd")
+
+    ;; CoreDuet for people/interaction data
+    (global-name "com.apple.coreduetd.people")
+    (global-name "com.apple.intelligenceplatform.View")
+)
+
+;;; File Access - Temporary and Cache Directories
+(allow file-read* file-write*
+       (subpath (param "TMPDIR"))
+       (subpath (param "DARWIN_CACHE_DIR"))
+       (mount-relative-literal "/.TemporaryItems")
+       (mount-relative-regex #"^/\.TemporaryItems/folders.[0-9]+(/|$)"))
+
+;;; File Access - Daemon Data
+;; Siri Entity Matcher and related Assistant data
+(allow file-read* file-write*
+    (home-subpath "/Library/Assistant/SiriVocabulary/")
+)
+
+;; Daemon cache directory
+(let ((cache-path-filter (home-subpath "/Library/Caches/com.apple.siriappintents.siriappintentsd")))
+  (allow file-read* file-write* cache-path-filter)
+  (allow file-issue-extension
+    (require-all
+      (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")
+      cache-path-filter)))
+
+;; IntelligenceFlow, Shortcuts, and FeatureStore data
+(allow file-read* file-write*
+    (home-subpath "/Library/IntelligenceFlow")
+    (home-subpath "/Library/Shortcuts")
+    (home-subpath "/Library/Logs/com.apple.FeatureStore")
+    (unsuffixed-userdir-subpath "/com.apple.FeatureStore/")
+)
+
+;; Read-only Trial system and asset framework access
+(allow file-read*
+    (home-subpath "/Library/Trial")
+    (home-subpath "/Library/UnifiedAssetFramework/")
+)
+
+;;; CoreDuet - People and Interaction Data
+(allow file-read*
+    (literal "/private/var/db/CoreDuet/People/interactionC.db")
+    (literal "/private/var/db/CoreDuet/People/interactionC.db-shm")
+    (literal "/private/var/db/CoreDuet/People/interactionC.db-wal"))
+(allow file-write*
+    (literal "/private/var/db/CoreDuet/People/interactionC.db-shm"))
+
+;;; File Sandbox Extensions
+;; SpotlightKnowledge read-write access for fetchSpotlightMetrics (internal builds only)
+(allow file-issue-extension
+    (extension-class "com.apple.managedcorespotlightd.read-write")
+)
+
+;; Allow issuing file extensions for app sandbox access
+(allow file-issue-extension
+    (require-all
+        (extension-class "com.apple.app-sandbox.read")))
+
+(with-filter (extension "com.apple.app-sandbox.read")
+    (allow file-read*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read")))
+(with-filter (extension "com.apple.app-sandbox.read-write")
+    (allow file-read* file-write*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")))
+
+;;; Network Access
+(system-network)
+
+(allow network-outbound
+    (literal "/private/var/run/mDNSResponder")
+    (remote tcp))
+
+;;; Distributed Notifications
+(allow distributed-notification-post)
+
+;;; Protected Group Containers
+(allow file-read* file-write*
+    (extension "com.apple.sandbox.application-group"))

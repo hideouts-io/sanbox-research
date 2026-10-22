@@ -1,0 +1,762 @@
+(version 2)
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; Basic Rules
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Deny all default rules.
+(deny default)
+(deny dynamic-code-generation)
+
+(import "dyld-support.sb")
+
+;; Rules copied from system.sb. Ones that we've deemed overly permissive
+;; or unnecessary for BlastDoor have been removed.
+
+;; Allow read access to standard system paths.
+(allow file-read*
+       (require-all (file-mode #o0004)
+                    (require-any (subpath "/System")
+                                 (subpath "/usr/lib")
+                                 (subpath "/usr/share")
+                                 (subpath "/private/var/db/dyld"))))
+
+;; Holdover QLT addendum to Airlock prior to rdar://115993961
+(define (home-literal home-relative-literal)
+       (literal (string-append (param "HOME") home-relative-literal)))
+(allow file-read*
+    (literal "/Library/Preferences/.GlobalPreferences.plist")
+    (home-literal "/Library/Preferences/.GlobalPreferences.plist")
+    (home-literal "/Library/Preferences/.GlobalPreferences_m.plist"))
+(with-filter (system-attribute apple-internal)
+    (allow file-read* (literal "/Library/Preferences/Logging/com.apple.diagnosticd.filter.plist")))
+
+;; Allow loading dylibs from system locations.
+(allow file-map-executable
+       (subpath "/System/Library")
+       (subpath "/usr/lib"))
+
+;; MessagesBlastDoorService was crashing on xpc at launch when denying this.
+;; Looks specific to Version 2
+(allow mach-bootstrap)
+
+;; Because we don't currently pass in variables for HOME or TMPDIR, in order to make Video previews work we need to allow this for all files
+(allow file-read-metadata)
+
+(allow file-read-metadata
+       (literal "/etc")
+       (literal "/tmp")
+       (literal "/var")
+       (literal "/private/etc/localtime"))
+
+;; Allow access to standard special files.
+(allow file-read*
+       (literal "/dev/random")
+       (literal "/dev/urandom")
+       (literal "/private/etc/passwd")          ;; Holdover QLT addendum to Airlock prior to rdar://115993961
+       (subpath "/private/var/db/timezone"))    ;; Holdover QLT addendum to Airlock prior to rdar://115993961
+
+(allow file-read* file-write-data
+       (literal "/dev/null")
+       (literal "/dev/zero"))
+
+(with-filter (system-attribute apple-internal)
+    (allow file-read* file-write-data file-ioctl
+        (literal "/dev/dtracehelper")))
+
+;; Don't allow core dumps to be written out unless this is on an internal device.
+(with-filter (system-attribute apple-internal)
+    (allow file-write*
+           (require-all (prefix "/cores/")
+                        (require-not (file-mode 0)))))
+
+;; Don't allow BlastDoor to spawn any other XPC services other than
+;; ones that we can intentionally allowlist later.
+(deny mach-lookup (xpc-service-name-prefix ""))
+
+;; Allow IPC to standard system agents.
+(allow mach-lookup
+       (global-name "com.apple.logd")
+       (global-name "com.apple.system.logger")
+       (global-name "com.apple.system.notification_center"))
+
+;; Holdover QLT addendum to Airlock prior to rdar://115993961
+(allow mach-lookup (xpc-service-name "com.apple.coremedia.videodecoder"))
+(deny mach-lookup (with no-report) (global-name "com.apple.tccd"))
+(with-filter (require-entitlement "com.apple.private.quicklook-thumbnail.webkit")
+    (allow generic-issue-extension (extension-class "com.apple.webkit.mach-bootstrap"))
+    (allow mach-issue-extension (extension-class "com.apple.webkit.extension.mach"))
+    (allow syscall-mach (machtrap-number MSC__kernelrpc_mach_port_unguard_trap))
+
+    (allow mach-lookup (global-name
+        "com.apple.WebKit.GPU"
+        "com.apple.WebKit.Networking"
+        "com.apple.WebKit.WebContent"
+        "com.apple.WebKit.WebContent.EnhancedSecurity"
+        "com.apple.windowserver.active"
+        "com.apple.nsurlsessiond"
+    ))
+)
+
+(with-filter (require-entitlement "com.apple.private.quicklook-thumbnail.video")
+    (allow mach-lookup (global-name
+        "com.apple.extensionkitservice"
+        "com.apple.runningboard"
+        "com.apple.coremedia.pluginformatreader"
+    ))
+
+    (allow file-read* (subpath "/Library/Video/Professional Video Workflow Plug-Ins"))
+    (allow syscall-unix (syscall-number SYS_fileport_makeport))
+)
+
+(with-filter (require-entitlement "com.apple.private.quicklook-thumbnail.raw-image")
+    (allow mach-lookup (global-name "com.apple.mobileassetd.v2"))
+)
+
+;; Only allow streaming logs on internal installs.
+(with-filter (system-attribute apple-internal)
+    (allow mach-lookup (global-name "com.apple.diagnosticd")))
+
+;; Allow mostly harmless operations.
+(allow signal process-info-dirtycontrol process-info-pidinfo
+       (target self))
+
+;; Holdover QLT addendum to Airlock prior to rdar://115993961
+(allow process-info-setcontrol (target self))
+
+;; Temporarily allow sysctl-read with reporting to see if this is
+;; used for anything.
+(allow (with telemetry) (with message "115993961-sysctl-read") sysctl-read)
+(allow sysctl-read
+       (sysctl-name-prefix "hw.optional.")              ;; "ucnormal_mem", "neon_fp16" used per rdar://135606704
+       (sysctl-name-prefix "hw.perflevel0.")            ;; per OSSEC guidance
+       (sysctl-name-prefix "hw.perflevel1.")            ;; per OSSEC guidance
+       (sysctl-name "hw.activecpu"                      ;; used per rdar://135606704
+                    "hw.cachelinesize"
+                    "hw.cpufamily"                      ;; used per rdar://135606704
+                    "hw.cputype"                        ;; used per rdar://135606704
+                    "hw.logicalcpu"
+                    "hw.logicalcpu_max"
+                    "hw.pagesize_compat"
+                    "hw.physicalcpu"
+                    "hw.physicalcpu_max"
+                    "hw.product"
+                    "hw.vectorunit"
+                    "kern.hv_vmm_present"               ;; used per rdar://135606704
+                    "kern.maxfilesperproc"              ;; used per rdar://135606704
+                    "kern.osproductversion"
+                    "kern.willshutdown"                 ;; used per rdar://135606704
+                    "machdep.ptrauth_enabled"           ;; used per rdar://135606704
+                    "security.mac.lockdown_mode_state"  ;; used per rdar://135606704
+                    "sysctl.proc_translated"))          ;; used per rdar://135606704
+
+;; Don't deny file-test-existence: <rdar://problem/59611011>
+;; Also keep it for version 1 compatibility
+(allow file-test-existence)
+
+;; Denying this should have no ill effects for our use case.
+(deny system-privilege)
+
+;; To be uncommented once the system call allowlist is complete...
+(deny syscall-unix
+    (syscall-number SYS_proc_info_extended_id))                 ;; used but denied without issue per rdar://135606704
+(deny syscall-unix (with telemetry) (with message "115993961-syscall-unix"))
+(allow syscall-unix
+       (syscall-group-bsdthread)
+       (syscall-group-close)
+       (syscall-group-fcntl)
+       (syscall-group-getfsstat)
+       (syscall-group-kevent)
+       (syscall-group-mkdir)
+       (syscall-group-pthread)
+       (syscall-group-read)
+       (syscall-group-rlimit)
+       (syscall-group-send)
+       (syscall-group-signal)
+       (syscall-group-stat)
+       (syscall-group-statfs)
+       (syscall-group-ulock)
+       (syscall-number SYS___disable_threadsignal
+                       SYS___mac_syscall
+                       SYS___semwait_signal                     ;; per OSSEC guidance
+                       SYS___semwait_signal_nocancel
+                       SYS_abort_with_payload
+                       SYS_access
+                       SYS_connect
+                       SYS_csops_audittoken
+                       SYS_csrctl
+                       SYS_dup
+                       SYS_exit
+                       SYS_faccessat
+                       SYS_fgetattrlist
+                       SYS_fgetxattr
+                       SYS_fsgetpath
+                       SYS_getattrlist
+                       SYS_getattrlistbulk
+                       SYS_getaudit_addr                        ;; Holdover QLT addendum to Airlock prior to rdar://115993961
+                       SYS_getdirentries64
+                       SYS_getegid                              ;; Holdover QLT addendum to Airlock prior to rdar://115993961
+                       SYS_getentropy
+                       SYS_geteuid
+                       SYS_getgid
+                       SYS_gethostuuid
+                       SYS_getrusage
+                       SYS_gettid                               ;; Holdover QLT addendum to Airlock prior to rdar://115993961
+                       SYS_gettimeofday
+                       SYS_getuid
+                       SYS_getxattr
+                       SYS_ioctl
+                       SYS_issetugid
+                       SYS_kdebug_trace
+                       SYS_kdebug_trace64
+                       SYS_kdebug_trace_string
+                       SYS_kdebug_typefilter
+                       SYS_listxattr
+                       SYS_lseek
+                       SYS_madvise
+                       SYS_mmap
+                       SYS_mprotect
+                       SYS_mremap_encrypted
+                       SYS_munmap
+                       SYS_open
+                       SYS_open_nocancel
+                       SYS_openat
+                       SYS_pathconf
+                       SYS_proc_info
+                       SYS_readlink
+                       SYS_rename
+                       SYS_rmdir
+                       SYS_shm_open
+                       SYS_shared_region_check_np               ;; Holdover QLT addendum to Airlock prior to rdar://115993961
+                       SYS_shared_region_map_and_slide_2_np
+                       SYS_socket
+                       SYS_sysctl
+                       SYS_sysctlbyname
+                       SYS_thread_selfid
+                       SYS_umask
+                       SYS_workq_kernreturn
+                       SYS_workq_open))
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; Mach Traps
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+(deny syscall-mach (with message "syscall-mach-denied"))
+(allow syscall-mach
+       ;; Mach Trap allow list
+       (machtrap-number MSC__kernelrpc_mach_port_allocate_trap
+                        MSC__kernelrpc_mach_port_construct_trap
+                        MSC__kernelrpc_mach_port_deallocate_trap
+                        MSC__kernelrpc_mach_port_destruct_trap
+                        MSC__kernelrpc_mach_port_get_attributes_trap
+                        MSC__kernelrpc_mach_port_guard_trap                 ;; used per rdar://135606704
+                        MSC__kernelrpc_mach_port_insert_member_trap         ;; used per rdar://135606704
+                        MSC__kernelrpc_mach_port_insert_right_trap
+                        MSC__kernelrpc_mach_port_mod_refs_trap
+                        MSC__kernelrpc_mach_port_request_notification_trap
+                        MSC__kernelrpc_mach_port_type_trap                  ;; used per rdar://135606704
+                        MSC__kernelrpc_mach_vm_allocate_trap
+                        MSC__kernelrpc_mach_vm_deallocate_trap
+                        MSC__kernelrpc_mach_vm_map_trap
+                        MSC__kernelrpc_mach_vm_protect_trap
+                        MSC__kernelrpc_mach_vm_purgable_control_trap
+                        MSC_host_self_trap
+                        MSC_iokit_user_client_trap ;; rdar://96304922
+                        MSC_mach_generate_activity_id
+                        MSC_mach_msg2_trap
+                        MSC_mach_reply_port
+                        MSC_mk_timer_create                                 ;; used per rdar://135606704
+                        MSC_mk_timer_destroy                                ;; used per rdar://135606704
+                        MSC_semaphore_signal_trap
+                        MSC_semaphore_timedwait_trap
+                        MSC_semaphore_wait_trap
+                        MSC_syscall_thread_switch
+                        MSC_thread_get_special_reply_port
+                        MSC_thread_self_trap)                               ;; used per rdar://135606704
+       ;; For Instruments
+       (require-all
+         (system-attribute apple-internal)
+         (machtrap-number MSC_task_dyld_process_info_notify_get)))
+
+;; Scoped for removal:
+(allow syscall-mach
+       (with telemetry)
+       (with message "115993961-syscall-mach")
+       (machtrap-number MSC_host_create_mach_voucher_trap
+                        MSC_mach_msg_overwrite_trap
+                        MSC_mach_msg_trap
+                        MSC_mach_timebase_info_trap
+                        MSC_mach_voucher_extract_attr_recipe_trap
+                        MSC_pid_for_task
+                        MSC_task_self_trap))
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; System MAC Syscall
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Start denying when allow list is complete
+;; (deny system-mac-syscall (with telemetry))
+(allow system-mac-syscall
+       (with message "115993961-system-mac-syscall")
+       (with telemetry))
+(allow system-mac-syscall
+      (mac-policy-name "AMFI"
+                       "Quarantine"
+                       "Sandbox"))
+                        
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; MIG Calls
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; syscall-mig telemetry
+;(deny syscall-mig)
+(allow syscall-mig (with telemetry) (with message "115993961-syscall-mig"))
+
+;; Kernel MIG Object allow list
+(allow syscall-mig
+       (kernel-mig-routine _mach_make_memory_entry
+                           clock_get_time
+                           host_get_io_master
+                           host_info
+                           io_connect_method
+                           io_connect_method_var_output
+                           io_iterator_is_valid
+                           io_iterator_next
+                           io_object_conforms_to
+                           io_registry_entry_create_iterator
+                           io_registry_entry_from_path
+                           io_registry_entry_get_child_iterator
+                           io_registry_entry_get_name_in_plane
+                           io_registry_entry_get_parent_iterator
+                           io_registry_entry_get_properties_bin_buf     ;; used per rdar://135606704
+                           io_registry_entry_get_property_bin_buf
+                           io_registry_entry_get_property_bytes
+                           io_registry_entry_get_registry_entry_id
+                           io_registry_get_root_entry
+                           io_server_version
+                           io_service_add_interest_notification_64
+                           io_service_add_notification_bin_64
+                           io_service_get_matching_service_bin
+                           io_service_get_matching_services_bin
+                           io_service_open_extended
+                           mach_port_get_context_from_user
+                           mach_port_get_refs
+                           mach_port_is_connection_for_service
+                           mach_port_request_notification               ;; used per rdar://135606704
+                           mach_port_set_attributes
+                           mach_vm_copy
+                           mach_vm_map_external
+                           semaphore_create
+                           semaphore_destroy
+                           task_create_identity_token                   ;; used per rdar://135606704
+                           task_get_special_port_from_user
+                           task_info_from_user
+                           task_policy_set                              ;; used per rdar://135606704
+                           task_restartable_ranges_synchronize
+                           thread_info
+                           thread_policy                                ;; used per rdar://135606704
+                           thread_policy_set))
+
+;; For Instruments
+(with-filter (system-attribute apple-internal)
+  (allow syscall-mig
+         (kernel-mig-routine mach_port_deallocate
+                             mach_vm_remap_external
+                             task_threads_from_user
+                             thread_resume
+                             thread_suspend
+                             thread_terminate)))
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; Syscall subcommand filtering
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; fcntl filtering
+(deny system-fcntl)
+(allow system-fcntl
+       (fcntl-command F_ADDFILESIGS_RETURN
+                      F_CHECK_LV
+                      F_GETFD
+                      F_GETPATH
+                      F_GETPROTECTIONCLASS
+                      F_GETSIGSINFO
+                      F_NOCACHE
+                      F_SETFD
+                      F_SPECULATIVE_READ))
+
+;; For validating the entitlements of clients. This is so only entitled
+;; clients can pass data into a BlastDoor instance.
+;; csops/csops_audittoken filtering
+(allow process-codesigning-entitlements-blob-get)
+(allow process-codesigning-status-get)
+(deny process-codesigning-blob-get
+      process-codesigning-cdhash-get
+      process-codesigning-identity-get
+      process-codesigning-status-set
+      process-codesigning-text-offset-get
+      process-codesigning-teamid-get)
+(deny process-info-codesignature (with no-report))
+
+;; ioctl filtering
+(deny file-ioctl)
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; Reading Files
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Support for BlastDoor receiving sandbox extensions from clients to read files from a target location.
+(allow file-read*
+       (extension "com.apple.app-sandbox.read"))
+
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; Writing Files
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Support for BlastDoor receiving sandbox extensions from clients to write files to a target location.
+(allow file-read* file-write*
+       (extension "com.apple.app-sandbox.read-write"))
+
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; The items below were copied from iOS's built-in "blastdoor-messages.sb"
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; The root cause of this violation is
+;; rdar://20117923 (setting the dirty bit on self calls out to 4 mac policy hooks, should be 0)
+;; rdar://72366475 The xnu team to optimize the attempt to check this for self PID
+(deny system-privilege (privilege-id PRIV_GLOBAL_PROC_INFO) (with no-report))
+
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;; Some of items below were copied from "system.sb"
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Required services.
+;; These were found by trial-and-error:
+;; - If trustd is not specified, making the connection to the decoder service/bundle fails verification
+(allow mach-lookup
+        ;; (global-name "com.apple.coremedia.videodecoder")      ;; [rdar://88289132] Hardening: removing video related rules. This seems uneccesary since we run this in process in MessagesAirlockService.
+        (global-name "com.apple.trustd.agent")                   ;; Certificate validation.
+        (global-name "com.apple.audio.AudioComponentRegistrar")  ;; Audio message previews.
+        (global-name "com.apple.audio.SandboxHelper")            ;; Audio message previews.
+)
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; IOKIT: All I/O Kit rules
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; iokit-get-properties: To get properties on an I/O Kit device
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Don't allow access to any I/O Kit properties
+(deny iokit-get-properties (with telemetry) (with message "115993961-iokit-get-properties"))
+
+;; Below is the list of exceptions to allow iokit-get-properties filtered for each
+;; iokit-registry-entry-class.
+;;
+;; Tips:
+;; 1. When adding new iokit-property into the allow list, use `ioreg -w0 -l -i` and
+;; `ioreg -w0 -l -i -p IODeviceTree` to audit, for the device with the appropriate hardware.
+;; Clownfish/Stash search can also reveal this hierarchy for most cases.
+;; Whenever applicable, use a common ancestor class to filter the rules.
+;;
+;; 2. The list of iokit-property in some blocks may contain properties looked up by APIs
+;; (e.g., CoreMedia) that do not exist in the class inheritence tree.
+;; Audit those case-by-case. It is useful to keep those segregated for maintenance.
+;;
+;; 3. Keep the list of blocks, and their respective iokit-properties sorted.
+
+;; All of these used but denied without issue per rdar://135606704
+(with-filter (iokit-registry-entry-class "AGXAcceleratorG13X")
+    (deny iokit-get-properties
+        (iokit-property "AGCInfo"
+                        "AGXInternalPerfCounterResourcesPath"
+                        "AGXLimitersDirName"
+                        "AGXParameterBufferMaxSize"
+                        "AGXParameterBufferMaxSizeEverMemless"
+                        "AGXParameterBufferMaxSizeNeverMemless"
+                        "AGXTraceCodeVersion"
+                        "CFBundleIdentifier"
+                        "CFBundleIdentifierKernel"
+                        "CommandSubmissionEnabled"
+                        "gpu-core-count"
+                        "GPUConfigurationVariable"
+                        "GPURawCounterBundleName"
+                        "GPURawCounterPluginClassName"
+                        "IOClass"
+                        "IOGeneralInterest"
+                        "IOGLBundleName"
+                        "IOGLESBundleName"
+                        "IOMatchCategory"
+                        "IOMatchedAtBoot"
+                        "IONameMatch"
+                        "IONameMatched"
+                        "IOPersonalityPublisher"
+                        "IOPowerManagement"
+                        "IOProbeScore"
+                        "IOProviderClass"
+                        "IOReportLegend"
+                        "IOReportLegendPublic"
+                        "IOSourceVersion"
+                        "KDebugVersion"
+                        "MetalStatisticsName"
+                        "model"
+                        "PerformanceStatistics"
+                        "Removable"
+                        "SchedulerState"
+                        "SCMBuildTime"
+                        "SCMVersionNumber"
+                        "SurfaceList"
+                        "vendor-id")))
+
+;; All of these used but denied without issue per rdar://135606704
+(with-filter (iokit-registry-entry-class "AGXAcceleratorG14X")
+    (deny iokit-get-properties
+        (iokit-property "AGXTraceCodeVersion"
+                        "AGXLimitersDirName"
+                        "AGXParameterBufferMaxSizeEverMemless"
+                        "AGXParameterBufferMaxSizeNeverMemless"
+                        "CFBundleIdentifier"
+                        "CFBundleIdentifierKernel"
+                        "CommandSubmissionEnabled"
+                        "GPUConfigurationVariable"
+                        "GPURawCounterBundleName"
+                        "IOGeneralInterest"
+                        "IOMatchedAtBoot"
+                        "IONameMatch"
+                        "IOProbeScore"
+                        "IOReportLegendPublic")))
+
+(with-filter (iokit-registry-entry-class "AGXFamilyAccelerator")
+    (allow iokit-get-properties
+        (iokit-property "MetalPluginClassName"
+                        "MetalPluginName"
+                        ;; Nonexistent properties
+                        "AAPL,slot-name"
+                        "IOAVDHEVCDecodeCapabilities"
+                        "IOGVAHEVCDecode"
+                        "SafeEjectRequested")))
+
+(with-filter (iokit-registry-entry-class "AppleARMIODevice")
+    (deny iokit-get-properties
+        (iokit-property "supports-apt")))                   ;; used but denied without issue per rdar://135606704
+
+(with-filter (iokit-registry-entry-class "AppleAVD")
+    (deny iokit-get-properties
+        (iokit-property "AppleJPEGNumCores"))               ;; used but denied without issue per rdar://135606704
+    (allow iokit-get-properties
+        (iokit-property "IOGVAHEVCDecode"
+                        "IOAVDHEVCDecodeCapabilities")))
+
+(with-filter (iokit-registry-entry-class "AppleDiagnosticDataAccess")
+    (deny iokit-get-properties
+        (iokit-property "AppleDiagnosticDataSysCfg")))      ;; used but denied without issue per rdar://135606704
+
+(with-filter (iokit-registry-entry-class "AppleDiskImageDevice")
+    (allow iokit-get-properties
+        (iokit-property "DiskImageURL")))
+
+(with-filter (iokit-registry-entry-class "AppleJPEGDriver")
+    (deny iokit-get-properties
+        (iokit-property "AppleJPEGNumCores"                 ;; used but denied without issue per rdar://135606704
+                        "IOAVDHEVCDecode"                   ;; used but denied without issue per rdar://135606704
+                        "IOAVDHEVCDecodeCapabilities")))    ;; used but denied without issue per rdar://135606704
+
+(with-filter (iokit-registry-entry-class "AppleM2ScalerCSCDriver")
+    (allow iokit-get-properties
+        (iokit-property "IOSurfaceAcceleratorCapabilitiesDict")))
+
+(with-filter (iokit-registry-entry-class "AppleMobileADBE0")
+    (deny iokit-get-properties
+        (iokit-property "APTDevice")))                      ;; used but denied without issue per rdar://135606704
+
+(with-filter (iokit-registry-entry-class "AppleProResHW")
+    (deny iokit-get-properties
+        (iokit-property "AppleJPEGNumCores"                 ;; used but denied without issue per rdar://135606704
+                        "IOAVDHEVCDecode"                   ;; used but denied without issue per rdar://135606704
+                        "IOAVDHEVCDecodeCapabilities")))    ;; used but denied without issue per rdar://135606704
+
+(with-filter (iokit-registry-entry-class "AppleSPUHIDInterface")
+    (deny iokit-get-properties
+        (iokit-property "als-colorCfg"                      ;; used but denied without issue per rdar://135606704
+                        "noMultiColorSupport")))            ;; used but denied without issue per rdar://135606704
+
+(with-filter (iokit-registry-entry-class "IOBlockStorageDevice"
+                                         "IOStorage")
+    (allow iokit-get-properties
+        (iokit-property "IOMediaIcon"
+                        "Protocol Characteristics")))
+
+(with-filter (iokit-registry-entry-class "IOBufferCopyEngine")
+    (allow iokit-get-properties
+        (iokit-property ;; Nonexistent properties
+                        ;; "AppleJPEGNumCores" ;; [rdar://88289132] Hardening: removing JPEG related rules
+                        "IOAVDHEVCDecodeCapabilities"
+                        "IOGVACodec"
+                        "IOGVAHEVCDecode")))
+
+(with-filter (iokit-registry-entry-class "IOGraphicsAccelerator2")
+    (allow iokit-get-properties
+        (iokit-property "IODVDBundleName"
+                        "IOGVACodec"
+                        "IOGVAHEVCDecode"
+                        "IOVARendererID"
+                        "MetalPluginClassName"
+                        "MetalPluginName"
+                        ;; Nonexistent properties
+                        "AAPL,slot-name"
+                        "IOAVDHEVCDecodeCapabilities"
+                        "IOPCIExpressLinkStatus"
+                        "SafeEjectRequested")))
+
+(with-filter (iokit-registry-entry-class "IOHDIXHDDrive")
+    (allow iokit-get-properties
+        (iokit-property "image-path")))
+
+(with-filter (iokit-registry-entry-class "IOMedia")
+    (allow iokit-get-properties
+        (iokit-property "Ejectable")
+        (iokit-property "Removable")))
+
+(with-filter (iokit-registry-entry-class "IOPCIDevice")
+    (allow iokit-get-properties
+        (iokit-property "AAPL,slot-name"
+                        "ATY,DeviceName"
+                        "ATY,FamilyName"
+                        "IOPCIExpressLinkStatus"
+                        "Thunderbolt Path"
+                        "built-in")))
+
+(with-filter (iokit-registry-entry-class "IOPlatformDevice")
+    (allow iokit-get-properties
+        (iokit-property "artwork-display-gamut"             ;; used per rdar://135606704
+                        "ean-storage-present"               ;; used per rdar://135606704
+                        "IORegistryEntryPropertyKeys"       ;; used per rdar://135606704
+                        "product-id"                        ;; used per rdar://135606704
+                        "soc-generation")))
+
+(with-filter (iokit-registry-entry-class "IOPlatformExpertDevice")
+    (deny iokit-get-properties
+        (iokit-property "platform-name")))                  ;; used but denied without issue per rdar://135606704
+
+(with-filter (iokit-registry-entry-class "IOSCSIProtocolInterface")
+    (allow iokit-get-properties
+        (iokit-property "IOMediaIcon"
+                        "Product Identification")))
+
+(with-filter (iokit-registry-entry-class "IOService")
+    (deny iokit-get-properties
+        (iokit-property "housing-color"                     ;; used but denied without issue per rdar://135606704
+                        "syscfg-v2-data"                    ;; used but denied without issue per rdar://135606704
+                        "syscfg-vmpv-data")))               ;; used but denied without issue per rdar://135606704
+
+(with-filter (iokit-registry-entry-class "IOThunderboltPort")
+    (allow iokit-get-properties
+        (iokit-property "Socket ID"
+                        "Supported Link Speed"
+                        "Supported Link Width")))
+
+;; board-id is present on multiple nodes:
+;; 1. [IODeviceTree:/] IOPlatformExpertDevice
+;; 2. [IODeviceTree:/platform] IOService
+(allow iokit-get-properties
+    (iokit-property "board-id"))
+
+(allow iokit-get-properties
+    (iokit-property "IOClassNameOverride"))
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; iokit-open: access to I/O Kit device via IOServiceOpen
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Don't allow access to any I/O Kit device
+;; Note: "iokit-open" is obsolete
+(deny iokit-open-user-client)
+
+;; [rdar://88289132] Hardening iokit-open-service
+;; Start denying when allow list is complete
+;; (deny iokit-open-service (with telemetry))
+(allow iokit-open-service (with telemetry) (with message "115993961-iokit-open-service"))
+(allow iokit-open-service
+       (iokit-registry-entry-class-prefix "AGXAcceleratorG")
+       (iokit-registry-entry-class "AppleJPEGDriver"            ;; used per rdar://135606704
+                                   "AppleM2ScalerCSCDriver"     ;; used per rdar://135606704
+                                   "IntelAccelerator"
+                                   "IOSurfaceRoot"
+                                   "IOPMrootDomain"))           ;; used per rdar://135606704
+
+(allow iokit-open-user-client
+       (iokit-user-client-class "IOAccelCommandQueue")
+       (apply-message-filter
+            (deny iokit-async-external-method)
+            (allow iokit-async-external-method
+                   (iokit-method-number 0))
+            (deny iokit-external-method)
+            (allow iokit-external-method
+                   (iokit-method-number 1 2 5))))
+
+(allow iokit-open-user-client
+       (iokit-user-client-class "IOAccelDevice2")
+       (apply-message-filter
+            (deny iokit-external-method)
+            (allow iokit-external-method
+                   (iokit-method-number 0 2 7 8 9 256))))
+
+(allow iokit-open-user-client
+       (iokit-user-client-class "IOAccelSharedUserClient2")
+       (apply-message-filter
+            (deny iokit-external-method)
+            (allow iokit-external-method
+                   (iokit-method-number 0 1 4 7 8 9 10 12 259 268))))
+
+(allow iokit-open-user-client
+       (iokit-user-client-class "IGAccelCommandQueue")
+       (apply-message-filter
+            (deny iokit-async-external-method)
+            (allow iokit-async-external-method
+                   (iokit-method-number 0))))
+
+(allow iokit-open-user-client
+       (iokit-user-client-class "IGAccelDevice")
+       (apply-message-filter
+            (deny iokit-external-method)
+            (allow iokit-external-method
+                   (iokit-method-number 0 2 7 8 9 10 11 12 24))))
+
+(allow iokit-open-user-client
+       (iokit-user-client-class "IGAccelSharedUserClient")
+       (apply-message-filter
+            (deny iokit-external-method)
+            (allow iokit-external-method
+                   (iokit-method-number 0 1 4 7 8 9 10 21 22))))
+
+(allow iokit-open-user-client
+       (iokit-user-client-class "IOSurfaceRootUserClient")
+       (apply-message-filter
+            (deny iokit-external-method)
+            (allow iokit-external-method
+                   (iokit-method-number 11 20                  ;; HEIF image preview only, still required for Hubble for flows going through LargeImageUnpacker
+                                        0 1 2 3 9 10 12 13 14 15 23 27 32 34 35 44))))
+
+(allow iokit-open-user-client
+       (iokit-user-client-class "IOSurfaceAcceleratorClient")
+       (apply-message-filter
+            (deny iokit-external-method)
+            (allow iokit-external-method
+                   (iokit-method-number 1))))
+                   
+(allow iokit-open-user-client
+       (iokit-user-client-class "IOSurfaceAcceleratorParavirtClient")
+       (apply-message-filter
+            (deny iokit-external-method)
+            (allow iokit-external-method
+                   (iokit-method-number 1))))
+
+
+;; Allow analytics on internal installs.
+;; rdar://118461704 (Create telemetry for dlsym usage in MBDS)
+(with-filter (system-attribute apple-internal)
+    (allow mach-lookup (global-name "com.apple.analyticsd"))
+    (allow syscall-unix (syscall-number SYS_csrctl)))

@@ -1,0 +1,53 @@
+;;; Copyright (c) 2025 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(import "system.sb")
+
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(define (home-regex home-relative-regex)
+       (regex (string-append "^" (regex-quote (param "_HOME")) home-relative-regex)))
+(define (home-literal home-relative-literal)
+       (literal (string-append (param "_HOME") home-relative-literal)))
+
+;;; Allow mach-lookup for XPC services
+(allow mach-lookup
+	(global-name "com.apple.diskimagesiod.xpc")
+	(global-name "com.apple.diskimagesiod.ram.xpc")
+	(global-name "com.apple.diskimagesiod.spb.xpc")
+	(global-name "com.apple.diskimagespawner.xpc"))
+
+;;; Allow signal sending for kill() to check if process is alive
+(allow signal (target others))
+
+;;; Allow process-info for pid checks
+(allow process-info* (target others))
+
+;;; maxfilesperproc is required by [NSFileHandle initialize] that happens as part of XPC protocol setup
+(allow sysctl-read
+	(sysctl-name "kern.maxfilesperproc"))
+
+;;; Required by XPC dispatching (_xpc_bundle_resolve_sync calls getattrlist on our executable)
+(allow file-read-metadata)
+
+;;; Preferences
+(allow file-read*
+	(literal "/Library/Preferences/.GlobalPreferences.plist")
+	(home-regex #"/Library/Preferences/ByHost/\.GlobalPreferences\.")
+	(home-literal "/Library/Preferences/.GlobalPreferences.plist"))
+
+;;; Consume sandbox extensions for secure file reopening
+(allow file-read* file-write*
+	(extension "com.apple.app-sandbox.read")
+	(extension "com.apple.app-sandbox.read-write"))
+
+;;; For localization strings, the daemon's folder must be readable:
+(allow file-read* (literal "/usr/libexec"))
+
+(allow user-preference-read (preference-domain "kCFPreferencesAnyApplication"))

@@ -1,0 +1,50 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+
+;; XXX: This profile currently enables access to `/usr/local` which is a
+;; mutable data-volume path. These paths may be restricted to AppleInternal
+;; installs only in the future.
+
+;; XXX: When updating this profile, please also make sure to update
+;; cryptex-session-template.sb as appropriate.
+
+(version 2)
+
+(allow default)
+(allow file-map-executable process-info* nvram*)
+(allow dynamic-code-generation)
+
+;; Allow syscalls
+(allow ipc-posix*)
+(allow socket-ioctl)
+(allow socket-option*)
+(allow syscall*)
+(allow system-fcntl)
+(allow system-mac-syscall)
+(allow system-socket)
+
+;; IPC
+(allow mach-lookup)
+(allow darwin-notification-post)
+
+;; Preferences (read-only)
+(allow user-preference-read)
+
+;; IOKit properties
+(allow iokit-get-properties)
+(allow iokit-open-service)
+
+;; Process exec
+;; Note: redundant with the CLI tools section above
+(allow process-exec*)
+(allow process-fork)
+(allow process-info* signal)
+
+;; Network
+(allow network-bind)
+(allow network-inbound)
+(allow network-outbound)

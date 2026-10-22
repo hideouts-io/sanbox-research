@@ -1,0 +1,150 @@
+;;; Copyright (c) 2026 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(import "contacts.sb")
+(contacts-client (param "HOME") (param "TMPDIR"))
+
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+(allow mach-task-name)
+
+(allow file-read*
+    (extension "com.apple.app-sandbox.read"))
+
+(allow mach-lookup
+    (global-name
+        "com.apple.accountsd.accountmanager"
+        "com.apple.adid"
+        "com.apple.appstored.xpc.request"
+        "com.apple.apsd"
+        "com.apple.AppSSO.service-xpc"
+        "com.apple.asktod"
+        "com.apple.biome.access.system"
+        "com.apple.biome.access.user"
+        "com.apple.biome.compute.source.user"
+        "com.apple.chronoservices"
+        "com.apple.cloudd"
+        "com.apple.cksharingmanagementd"
+        "com.apple.containermanagerd"
+        "com.apple.coreduetd.context"
+        "com.apple.coreduetd.knowledge.user"
+        "com.apple.coreservices.quarantine-resolver"
+        "com.apple.dnssd.service"
+        "com.apple.duetactivityscheduler"
+        "com.apple.fairplayd.versioned"
+        "com.apple.familycircle.agent"
+        "com.apple.FamilyControlsAgent.private"
+        "com.apple.iconservices"
+        "com.apple.iconservices.store"
+        "com.apple.lsd.mapdb"
+        "com.apple.lsd.modifydb"
+        "com.apple.ManagedSettingsAgent"
+        "com.apple.metadata.mds"
+        "com.apple.securityd.xpc"
+        "com.apple.servicesanalytics.xpc"
+        "com.apple.symptom_analytics"
+        "com.apple.system.opendirectoryd.api"
+        "com.apple.SystemConfiguration.configd"
+        "com.apple.SystemConfiguration.DNSConfiguration"
+        "com.apple.UsageTrackingAgent"
+        "com.apple.usernotifications.listener"
+        "com.apple.usymptomsd"
+        "com.apple.windowserver.active"
+        "com.apple.xpc.amsaccountsd"
+        "com.apple.xpc.amsengagementd"
+        "com.apple.xpc.amstoold"
+    )
+)
+
+(allow process-info-pidinfo)
+(allow process-info* (target self))
+
+(allow process-info-codesignature)
+
+(allow file-read-metadata)
+
+(allow file-read* file-write*
+    (subpath (param "TMPDIR"))
+    (subpath (param "DARWIN_CACHE_DIR"))
+    (subpath (param "DARWIN_USER_DIR"))
+)
+
+(allow file-read* file-write*
+    (subpath "/private/var/tmp/ScreenTimeDiagnostics"))
+
+(allow file-read* file-write*
+    (home-subpath "/Library/Application Support/com.apple.remotemanagementd/")
+    (home-subpath "/Library/Caches/com.apple.AppleMediaServices")
+    (home-subpath "/Library/Caches/com.apple.ScreenTimeSettingsAgent")
+    (home-subpath "/Library/com.apple.AppleMediaServices")
+    (home-subpath "/Library/HTTPStorages/com.apple.ScreenTimeSettingsAgent")
+)
+
+(allow file-read*
+    (literal "/Library/Application Support/CrashReporter/DiagnosticMessagesHistory.plist")
+    (literal "/Library/Preferences/SystemConfiguration/preferences.plist")
+    (literal "/Library/Preferences/com.apple.networkd.plist")
+    (literal "/private/var/db/os_eligibility/eligibility.plist")
+    (literal "/private/var/run/resolv.conf")
+    (subpath "/Applications")
+    (subpath "/AppleInternal/Library/Assistant")
+    (subpath "/AppleInternal/Library/ExtensionKit/ExtensionPoints")
+    (home-subpath "/Library/Preferences/com.apple.LaunchServices")
+    (subpath (param "SECURITY_MESSAGES_DIR"))
+)
+
+(allow file-read* file-write* (mount-relative-regex #"^/\.TemporaryItems(/|$)"))
+
+(allow network-outbound
+    (literal "/private/var/run/mDNSResponder")
+    (remote tcp "*:*"))
+
+(allow system-socket (socket-domain AF_SYSTEM))
+
+(allow user-preference-read
+    (preference-domain
+        "com.apple.AppleMediaServices"
+        "com.apple.assistant.backedup"
+        "com.apple.assistant.support"
+        "com.apple.CloudKit"
+        "com.apple.DeviceActivity"
+        "com.apple.gms.availability"
+        "com.apple.itunesstored"
+        "com.apple.ScreenTimeSettingsAgent"
+        "kCFPreferencesAnyApplication"
+    )
+)
+
+(allow user-preference-write
+    (preference-domain
+        "com.apple.DeviceActivity"
+        "com.apple.ScreenTimeSettingsAgent"
+    )
+)
+
+(allow iokit-open-user-client
+    (iokit-user-client-class "AppleKeyStoreUserClient")
+)

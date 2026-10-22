@@ -1,0 +1,103 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex))
+)
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath))
+)
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix))
+)
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal))
+)
+
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; Preference domain
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.DeviceCheck")
+    (preference-domain "kCFPreferencesAnyApplication")
+    (preference-domain "com.apple.security")
+)
+
+;; Read/write access to a temporary directory.
+(allow file-read* file-write*
+    (subpath (param "TMPDIR"))
+    (subpath (param "DARWIN_CACHE_DIR"))
+)
+
+;; Read/write cache access
+(let ((cache-path-filter (home-subpath "/Library/Caches/com.apple.DeviceCheckInternal")))
+    (allow file-read* file-write* cache-path-filter)
+)
+  
+;; Read/write HTTP storages
+(let ((httpstorage-path-filter (home-subpath "/Library/HTTPStorages/com.apple.DeviceCheckInternal")))
+    (allow file-read* file-write* httpstorage-path-filter)
+)
+
+;; Read-only access.
+(allow file-read*
+    (file-attribute apfs-preboot-volume)
+    (subpath "/private/var/db/mds/messages/501/se_SecurityMessages")
+    (subpath "/Applications/")
+    (subpath "/Library/")
+)
+
+;; Mach Lookup
+(allow mach-lookup
+    (global-name "com.apple.CoreAuthentication.agent")
+    (global-name "com.apple.CoreAuthentication.agent.libxpc")
+    (global-name "com.apple.ctkd.token-client")
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.mobileactivationd")
+    (global-name "com.apple.mobileassetd.v2")
+    (global-name "com.apple.remoted")
+    (global-name "com.apple.securityd.xpc")
+    (global-name "com.apple.duetactivityscheduler")
+    (global-name "com.apple.dnssd.service")
+    (global-name "com.apple.securityd.systemkeychain")
+    (global-name "com.apple.nesessionmanager.content-filter")
+    (global-name "com.apple.metadata.mds")
+    (global-name "com.apple.securityd.systemkeychain")
+    (global-name "com.apple.security.syspolicy")
+)
+    
+(allow iokit-open
+    (iokit-user-client-class "AppleKeyStoreUserClient")
+    (iokit-user-client-class "BootPolicyUserClient")
+)
+
+;; Networking
+(system-network)
+(allow system-socket)
+(allow network-outbound)
+
+(allow process-info-pidinfo)

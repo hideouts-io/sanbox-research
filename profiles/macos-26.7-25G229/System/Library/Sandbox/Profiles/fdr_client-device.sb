@@ -1,0 +1,102 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+;;; TODO: Change these to deny before finalizing this profile.
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+(allow network-outbound)
+
+(allow iokit-open
+    (iokit-user-client-class "AppleKeyStoreUserClient")
+    (iokit-user-client-class "AppleSEPUserClient")
+    (iokit-user-client-class "IOAESAcceleratorUserClient")
+    (iokit-user-client-class "AppleBiometricServicesUserClient")
+)
+
+(allow user-preference-read user-preference-write
+       (preference-domain "fdr_client-device")
+       (preference-domain "kCFPreferencesAnyApplication")
+)
+
+(allow file-read* (subpath "/System/Volumes/Preboot"))
+(allow file-read-data
+       (literal "/Library/Preferences/com.apple.networkd.plist")
+       (literal "/private/var/db/mds/messages/501/se_SecurityMessages")
+       (literal "/private/var/db/nsurlstoraged/dafsaData.bin")
+
+)
+
+(allow file-write* file-read*
+       (subpath "/System/Volumes/Hardware/FactoryData/System/Library/Caches/com.apple.factorydata")
+       (subpath "/System/Library/Caches/com.apple.factorydata")
+       (subpath "/private/tmp")
+)
+
+(allow system-socket
+	(socket-domain AF_SYSTEM)
+)
+
+(allow mach-lookup
+    (global-name "com.apple.AppSSO.service-xpc")
+    (global-name "com.apple.usymptomsd")
+    (global-name "com.apple.nfcd.hwmanager")
+    (global-name "com.apple.AppleDeviceQueryService")
+)
+
+(allow nvram-get
+       (nvram-variable "zhuge_debug")
+       (nvram-variable "backlight-nits")
+       (nvram-variable "SystemAudioVolumeExtension")
+       (nvram-variable "upgrade-boot-volume")
+       (nvram-variable "ota-updateType")
+       (nvram-variable "boot-breadcrumbs")
+       (nvram-variable "boot-volume")
+       (nvram-variable "auto-boot")
+       (nvram-variable "SystemAudioVolume")
+       (nvram-variable "wlancprops")
+       (nvram-variable "prev-lang:kbd")
+       (nvram-variable "boot-args")
+       (nvram-variable "lts-persistance")
+       (nvram-variable "BluetoothUHEDevices")
+       (nvram-variable "BluetoothInfo")
+       (nvram-variable "panicmedic-timestamps")
+       (nvram-variable "last-boot-args-script-vers")
+       (nvram-variable "bluetoothInternalControllerInfo")
+       (nvram-variable "LocationServicesEnabled")
+       (nvram-variable "boot-note")
+       (nvram-variable "IASUCatalogURL")
+       (nvram-variable "prev-lang-diags:kbd")
+       (nvram-variable "usbcfwflasherResult")
+       (nvram-variable "IDInstallerDataV2")
+       (nvram-variable "corefile-key")
+       (nvram-variable "bluetoothExternalDongleFailed")
+       (nvram-variable "_kdp_ipstr")
+       (nvram-variable "display-crossbar0")
+       (nvram-variable "bootdelay")
+       (nvram-variable "IsServicePart")
+       (nvram-variable "fmm-computer-name")
+       (nvram-variable "fmm-mobileme-token-FMM")
+       (nvram-variable "fmm-mobileme-token-FMM-BridgeHasAccount")
+)

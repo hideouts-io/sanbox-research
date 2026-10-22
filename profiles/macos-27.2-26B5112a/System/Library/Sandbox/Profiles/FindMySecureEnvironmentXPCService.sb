@@ -1,0 +1,169 @@
+;;; Copyright (c) 2026 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+;;; https://confluence.sd.apple.com/display/OSSEC/How+To+Sandbox+a+Daemon+on+macOS
+;;;
+;;; FindMySecureEnvironmentXPCService is a per-user LaunchAgent on macOS. It
+;;; provides Find My clients with AppleConnect-authenticated session tokens
+;;; for `findmy-asset.corp.apple.com`. It runs only on internal builds.
+
+(version 1)
+
+;;; These 4 lines configure the sandbox for tracing mode (no enforcement)
+;; (allow (with report) default)
+;; (allow (with report) file-map-executable iokit-get-properties process-info* nvram*)
+;; (allow (with report) dynamic-code-generation)
+;; (deny mach-priv-host-port)
+
+;;;; These 3 lines enforce the profile
+(deny default)
+(deny file-map-executable iokit-get-properties process-info* nvram*)
+(deny dynamic-code-generation)
+
+(import "system.sb")
+(system-network) ;; Allow access to the network
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;;;; Homedir-relative path filters (defined before use)
+
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex))
+)
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath))
+)
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix))
+)
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal))
+)
+
+;;;; Process-info / metadata
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of XPC clients.
+(allow process-info-codesignature)
+
+;;;; Filesystem
+
+;; Read-only access to our framework bundle.
+(allow file-read*
+    (subpath "/System/Library/PrivateFrameworks/FindMySecureEnvironment.framework")
+)
+
+;; Bundle-ID-scoped cache (URLSession, etc.).
+(allow file-read* file-write*
+    (home-subpath "/Library/Caches/com.apple.findmy.FindMySecureEnvironmentXPCService")
+    (subpath (param "DARWIN_CACHE_DIR"))
+    (subpath (param "DARWIN_USER_DIR"))
+    (subpath (param "TMPDIR"))
+)
+
+;;;;
+;;;; Security.framework
+;;;;
+
+;; Security.framework read-write access (mds cache).
+(allow file-read* file-write*
+    (subpath "/private/var/db/mds/system")
+)
+
+;; Security.framework read-only access.
+(allow file-read*
+    (literal (param "SECURITY_MESSAGES_DIR"))
+    (home-subpath "/Library/Preferences/com.apple.security.plist")
+)
+
+(allow ipc-posix-shm-read-data ipc-posix-shm-write-create ipc-posix-shm-write-data
+    (ipc-posix-name "com.apple.AppleDatabaseChanged")
+)
+
+;;;;
+;;;; Preferences
+;;;;
+
+;; Our own bundle-ID prefs (read-write) plus globals (read-only).
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.findmy.FindMySecureEnvironmentXPCService")
+)
+
+(allow user-preference-read
+    (preference-domain "kCFPreferencesAnyApplication")
+    (preference-domain "com.apple.security")
+)
+
+;;;;
+;;;; Mach services
+;;;;
+
+;; The minimum set required to:
+;;   - Authenticate via AppleConnect / Extensible SSO
+;;   - Reach the system configuration / log / diagnostic infrastructure
+;;   - Defer UI prompts cleanly when running headless
+(allow mach-lookup
+    ;; Logging + diagnostics
+    (global-name "com.apple.diagnosticd")
+    (global-name "com.apple.system.logger")
+    (global-name "com.apple.system.notification_center")
+
+    ;; System configuration / network state
+    (global-name "com.apple.SystemConfiguration.configd")
+
+    ;; Code-signing / quarantine / launch services
+    (global-name "com.apple.SecurityServer")
+    (global-name "com.apple.coreservices.launchservicesd")
+    (global-name "com.apple.coreservices.quarantine-resolver")
+    (global-name "com.apple.lsd.mapdb")
+
+    ;; AppleConnect / Anisette / Extensible SSO
+    (global-name "com.apple.ak.anisette.xpc")
+    (global-name "com.apple.identityservicesd.desktop.auth")
+    (global-name "com.apple.identityservicesd.idquery.desktop.auth")
+
+    ;; Authentication agents (used when AppleConnect SSO defers UI from a headless agent)
+    (global-name "com.apple.CoreAuthentication.agent")
+    (global-name "com.apple.CoreAuthentication.agent.libxpc")
+
+    ;; tcc (privacy)
+    (global-name "com.apple.tccd")
+
+    ;; Securityd / keychain plumbing used by URLSession TLS
+    (global-name "com.apple.securityd.xpc")
+    (global-name "com.apple.metadata.mds")
+
+    ;; Trust evaluation
+    (global-name "com.apple.trustd.agent")
+)
+
+;;;;
+;;;; IOKit
+;;;;
+
+(allow iokit-open
+    (iokit-user-client-class "RootDomainUserClient")
+    (iokit-user-client-class "AppleKeyStoreUserClient")
+)
+
+(allow iokit-get-properties)
+
+;;;;
+;;;; Network outbound
+;;;;
+
+(allow network-outbound
+    (literal "/private/var/run/mDNSResponder")
+    (remote tcp)
+    (remote udp)
+)

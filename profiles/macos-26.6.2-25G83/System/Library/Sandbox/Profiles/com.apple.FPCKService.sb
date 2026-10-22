@@ -1,0 +1,156 @@
+;;; Copyright (c) 2017 Apple Inc. All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+(deny mach-priv-host-port)
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+;; Standard rule to allow reading when we have a sandbox extension to read
+(with-filter (extension "com.apple.app-sandbox.read")
+  (allow file-read*)
+  (allow file-issue-extension (extension-class "com.apple.app-sandbox.read")))
+;; Standard rule to allow writing when we have a sandbox extension to write
+(with-filter (extension "com.apple.app-sandbox.read-write")
+  (allow file-read* file-write*)
+  (allow file-issue-extension (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")))
+(allow process-info* (target self))
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+(allow user-preference*
+    (preference-domain "com.apple.fileproviderd")
+    (preference-domain "com.apple.iclouddrive.features"))
+;; Alias for .GlobalPreferences
+(allow user-preference-read (preference-domain "kCFPreferencesAnyApplication"))
+(allow sysctl-write
+;; used by fpfs_enable_vnode_rapid_aging
+    (sysctl-name "kern.rage_vnode"))
+;;; <rdar:
+;;; UUID of the form: XXXXXXXX-XXXX-XXXX--XXXX-XXXXXXXXXXXX
+;;; That's 8X-4X-4X-4X-12X; where X = "[0-9A-F]", length(X) = 8
+;;; Return a regex string which matches capital hex digit patterns
+;;; pattern descriptor is an list of integers where the element specifies the repeat
+;;; count of the hex digit; 0 means insert a dash
+;;; You can paste these functions into: https:
+(define (HEX-pattern-match-generator pattern-descriptor)
+    (letrec ((pattern-string ""))
+        (for-each (lambda (repeat-count)
+            (if (zero? repeat-count)
+                (set! pattern-string (string-append pattern-string "-"))
+                (let appender ((count repeat-count))
+                    (if (> count 0)
+                        (begin
+                            (set! pattern-string (string-append pattern-string "[0-9A-F]"))
+                            (appender (- count 1)))))))
+        pattern-descriptor)
+    pattern-string)
+)
+;; return a regex pattern matching string for 8-4-4-4-12 UUIDs:
+(define (uuid-HEX-pattern-match-string)
+(HEX-pattern-match-generator '(8 0 4 0 4 0 4 0 12)))
+;; global to hold the computed UUID matching pattern.
+(define *uuid-pattern* "")
+(define (uuid-regex-string)
+       (if (zero? (string-length *uuid-pattern*))
+              (set! *uuid-pattern* (uuid-HEX-pattern-match-string)))
+       *uuid-pattern*
+)
+;; root when running in enterprise persona context
+(define (enterprise-context-root)
+       (regex (string-append "^/Volumes/" (uuid-regex-string) "(/|$)"))
+)
+(define (enterprise-context-tmp)
+       (regex (string-append "^/Volumes/" (uuid-regex-string) #"/tmp/com.apple.fileproviderd(/|$)"))
+)
+(allow file-read* file-write*
+       ;; File Provider file locations
+       (home-subpath "/Library/CloudStorage")
+       ;; Need access to the Purgatory directories, possibly "/Library/Application Support/FileProvider/Purgatory" is sufficient
+       (home-subpath "/Library/Application Support/FileProvider")
+       (home-subpath "/Library/Mobile Documents")
+       (home-subpath "/Desktop")
+       (home-subpath "/Documents")
+       ;; EDS
+       (enterprise-context-root)
+       (enterprise-context-tmp)
+       ;; Read/write access to a temporary directory.
+       (subpath (param "TMPDIR"))
+       (subpath (param "DARWIN_CACHE_DIR"))
+       (subpath (param "DARWIN_TEMP_DIR"))
+       (mount-relative-regex #"^/\.DocumentRevisions-V100($|/)")
+)
+;; Allow read-only access to necessary folders in $HOME/Library/Trial
+(allow file-read*
+    (home-subpath "/Library/Trial/NamespaceDescriptors")
+    (home-subpath "/Library/Trial/Treatments/254"))
+(allow system-fsctl
+    (fsctl-command APFSIOC_DOC_ID_TO_FILE_ID
+        APFSIOC_GET_DIR_STATS_EXT
+        APFSIOC_GET_PURGEABLE_FILE_FLAGS
+        APFSIOC_MAINTAIN_DIR_STATS
+        APFSIOC_PURGEABLE_GET_FILE_INFO
+        APFSIOC_MARK_PURGEABLE_EXT
+        APFSIOC_MAKE_OBJECT_DATALESS
+        APFSIOC_MARK_PURGEABLE
+        APFSIOC_SHARE_RANGE
+        APFSIOC_SYNC_ROOT_GET_FLAG
+        APFSIOC_SYNC_ROOT_SET_FLAG
+        FSIOC_CAS_BSDFLAGS
+        APFSIOC_REVOKE_CHILDREN
+        APFSIOC_PURGE_SINGLE_FILE
+        APFSIOC_PURGEABLE_GET_DETAILED_STATS
+        APFSIOC_GET_SPEC_TELEM
+        APFSIOC_OBJECT_UNSET_DATALESS
+        APFSIOC_PURGEABLE_LABEL_PURGEABLE
+    )
+)
+;; Package detection
+(if (defined? 'system-package-check)
+    (allow system-package-check)
+)
+(allow iokit-get-properties
+    ;; reading the CoreStorage encrypted status
+    (iokit-registry-entry-class "CoreStorageLogical")
+    ;; Radar-Id: rdar:
+    (iokit-registry-entry-class "AppleAPFSUserClient")
+    ;; read volume role for multi-volume support w/ FPFS
+    (iokit-registry-entry-class "AppleAPFSVolume")
+    (iokit-registry-entry-class "AppleAPFSVolumeBSDClient")
+)
+;; Radar-Id: rdar:
+(allow iokit-open (iokit-user-client-class "AppleAPFSUserClient"))
+(define (multivolume-store-paths)
+    (require-any
+        (mount-relative-regex #"^/\.CloudStorage($|/)")
+        (mount-relative-regex #"^/\.TemporaryItems($|/)")
+    )
+)
+(allow file-read* file-write*
+    (multivolume-store-paths)
+)
+(allow file-issue-extension
+    (multivolume-store-paths)
+)
+(allow mach-lookup
+    (global-name "com.apple.FileCoordination")
+    ;; These are possibly not necessary
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.lsd.modifydb")
+    (global-name "com.apple.coreservices.quarantine-resolver")
+    (global-name "com.apple.rtcreportingd")
+)

@@ -1,0 +1,247 @@
+;;
+;; Spotlight importer - sandbox profile
+;; Copyright (c) 2006-2008 Apple Inc.  All Rights reserved.
+;;
+;; WARNING: The sandbox rules in this file currently constitute
+;; Apple System Private Interface and are subject to change at any time and
+;; without notice. The contents of this file are also auto-generated and not
+;; user editable; it may be overwritten at any time.
+;;
+
+(version 3)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+;; Rules copied from system.sb. Ones that we've deemed overly permissive
+;; or unnecessary for spotlightknowledged have been removed.
+
+;; Allow read access to standard system paths.
+(allow file-read*
+       (require-all (file-mode #o0004)
+                    (require-any (subpath "/System")
+                                 (subpath "/usr/lib")
+                                 (subpath "/usr/share"))))
+
+;; Allow loading dylibs from system locations.
+(allow file-map-executable
+       (subpath "/System/Library")
+       (subpath "/usr/lib"))
+
+;; MessagesBlastDoorService was crashing on xpc at launch when denying this.
+;; Looks specific to Version 2
+(allow mach-bootstrap)
+
+;; Because we don't currently pass in variables for HOME or TMPDIR, in order to make Video previews work we need to allow this for all files
+(allow file-read-metadata)
+
+;; Allow access to standard special files.
+(allow file-read*
+       (literal "/dev/random")
+       (literal "/dev/urandom"))
+
+(allow file-read* file-write-data
+       (literal "/dev/null")
+       (literal "/dev/zero"))
+
+(with-filter (system-attribute apple-internal)
+    (allow file-read* file-write-data file-ioctl
+        (literal "/dev/dtracehelper")))
+
+;; Don't allow core dumps to be written out unless this is on an internal device.
+(with-filter (system-attribute apple-internal)
+    (allow file-write*
+           (require-all (prefix "/cores/")
+                        (require-not (file-mode 0)))))
+
+;; Allow IPC to standard system agents.
+(allow mach-lookup
+       (global-name "com.apple.logd")
+       (global-name "com.apple.system.logger")
+       (global-name "com.apple.system.notification_center"))
+
+;; Only allow streaming logs on internal installs.
+(with-filter (system-attribute apple-internal)
+    (allow mach-lookup (global-name "com.apple.diagnosticd")))
+
+;; Allow mostly harmless operations.
+(allow signal process-info-dirtycontrol process-info-pidinfo
+       (target self))
+
+;; Custom rules for spotlightknowledged
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+(allow process-info-pidinfo)
+
+(allow mach-lookup
+    (global-name "com.apple.mediaanalysisd.service.public")
+    (global-name "com.apple.CoreServices.coreservicesd")
+    (global-name "com.apple.mobileassetd.v2")
+    (global-name "com.apple.analyticsd"))
+
+(allow sysctl-read
+           (sysctl-name "kern.secure_kernel")
+           (sysctl-name "kern.osproductversion")
+           (sysctl-name "hw.pagesize_compat")
+           (sysctl-name "kern.hv_vmm_present")
+           (sysctl-name "hw.cpufamily")
+           (sysctl-name "hw.cpusubfamily")
+           (sysctl-name "hw.perflevel0.physicalcpu_max")
+           (sysctl-name "hw.perflevel1.physicalcpu_max")
+           (sysctl-name "hw.perflevel0.l2cachesize")
+           (sysctl-name "hw.perflevel0.cpusperl2")
+           (sysctl-name "hw.perflevel1.l2cachesize")
+           (sysctl-name "hw.perflevel1.cpusperl2")
+           (sysctl-name-prefix "kern.proc.pid."))
+           
+(allow syscall-mach
+       (machtrap-number MSC__kernelrpc_mach_port_allocate_trap
+                        MSC__kernelrpc_mach_port_construct_trap
+                        MSC__kernelrpc_mach_port_deallocate_trap
+                        MSC__kernelrpc_mach_port_destruct_trap
+                        MSC__kernelrpc_mach_port_guard_trap
+                        MSC__kernelrpc_mach_port_insert_right_trap
+                        MSC__kernelrpc_mach_port_mod_refs_trap
+                        MSC__kernelrpc_mach_port_request_notification_trap
+                        MSC__kernelrpc_mach_vm_allocate_trap
+                        MSC__kernelrpc_mach_vm_deallocate_trap
+                        MSC__kernelrpc_mach_vm_map_trap
+                        MSC__kernelrpc_mach_vm_protect_trap
+                        MSC__kernelrpc_mach_vm_purgable_control_trap
+                        MSC_host_self_trap
+                        MSC_iokit_user_client_trap
+                        MSC_mach_generate_activity_id
+                        MSC_mach_msg2_trap
+                        MSC_mach_reply_port
+                        MSC_semaphore_signal_trap
+                        MSC_semaphore_timedwait_trap
+                        MSC_semaphore_wait_trap
+                        MSC_syscall_thread_switch
+                        MSC_thread_get_special_reply_port
+                        MSC__kernelrpc_mach_port_get_attributes_trap
+                        MSC__kernelrpc_mach_port_insert_member_trap
+                        MSC__kernelrpc_mach_port_type_trap
+                        MSC_host_create_mach_voucher_trap
+                        MSC_mach_msg_overwrite_trap
+                        MSC_mach_msg_trap
+                        MSC_mach_timebase_info_trap
+                        MSC_mach_voucher_extract_attr_recipe_trap
+                        MSC_mk_timer_create
+                        MSC_mk_timer_destroy
+                        MSC_pid_for_task
+                        MSC_task_self_trap
+                        MSC_thread_self_trap
+                        MSC__kernelrpc_mach_port_insert_member_trap
+                        MSC__kernelrpc_mach_port_extract_member_trap
+                        MSC_mk_timer_arm))
+           
+(allow syscall-unix
+       (syscall-group-bsdthread)
+       (syscall-group-close)
+       (syscall-group-fcntl)
+       (syscall-group-getfsstat)
+       (syscall-group-kevent)
+       (syscall-group-mkdir)
+       (syscall-group-pthread)
+       (syscall-group-read)
+       (syscall-group-rlimit)
+       (syscall-group-send)
+       (syscall-group-signal)
+       (syscall-group-stat)
+       (syscall-group-statfs)
+       (syscall-group-ulock)
+       (syscall-number SYS___disable_threadsignal
+                       SYS___mac_syscall
+                       SYS___semwait_signal_nocancel
+                       SYS_abort_with_payload
+                       SYS_access
+                       SYS_connect
+                       SYS_csops_audittoken
+                       SYS_csrctl
+                       SYS_dup
+                       SYS_exit
+                       SYS_faccessat
+                       SYS_fgetattrlist
+                       SYS_fgetxattr
+                       SYS_fsgetpath
+                       SYS_getattrlist
+                       SYS_getattrlistbulk
+                       SYS_getdirentries64
+                       SYS_getentropy
+                       SYS_geteuid
+                       SYS_getgid
+                       SYS_gethostuuid
+                       SYS_getrusage
+                       SYS_gettimeofday
+                       SYS_getuid
+                       SYS_getxattr
+                       SYS_ioctl
+                       SYS_issetugid
+                       SYS_kdebug_trace
+                       SYS_kdebug_trace64
+                       SYS_kdebug_trace_string
+                       SYS_kdebug_typefilter
+                       SYS_listxattr
+                       SYS_lseek
+                       SYS_madvise
+                       SYS_mmap
+                       SYS_mprotect
+                       SYS_mremap_encrypted
+                       SYS_munmap
+                       SYS_open
+                       SYS_open_nocancel
+                       SYS_openat
+                       SYS_pathconf
+                       SYS_proc_info
+                       SYS_readlink
+                       SYS_rename
+                       SYS_rmdir
+                       SYS_shm_open
+                       SYS_shared_region_map_and_slide_2_np
+                       SYS_socket
+                       SYS_sysctl
+                       SYS_sysctlbyname
+                       SYS_thread_selfid
+                       SYS_umask
+                       SYS_workq_kernreturn
+                       SYS_workq_open
+                       SYS_open_dprotected_np
+                       SYS_ftruncate))
+                       
+(allow file-test-existence)
+                      
+(allow system-mac-syscall
+      (mac-policy-name "Sandbox"))
+
+(allow system-fcntl
+       (fcntl-command F_ADDFILESIGS_RETURN
+                      F_CHECK_LV
+                      F_GETFD
+                      F_GETPATH
+                      F_GETPROTECTIONCLASS
+                      F_GETSIGSINFO
+                      F_NOCACHE
+                      F_SETFD
+                      F_SPECULATIVE_READ
+                      F_RDADVISE
+                      F_SETPROTECTIONCLASS))
+
+(allow file-read-data
+    (regex #"/Library/LanguageModeling")
+    (regex #"/Library/Preferences/")
+    (regex #"/private/var/db/eligibilityd"))
+
+(with-filter (iokit-registry-entry-class "AppleARMIODevice")
+    (allow iokit-get-properties
+        (iokit-property "ane-type")))
+                        
+(with-filter (iokit-registry-entry-class "IOPlatformExpertDevice")
+    (allow iokit-get-properties
+        (iokit-property "ane-type")))
+
+(allow ipc-posix-shm-read-data
+           (ipc-posix-name "apple.cfprefs.501v1"))
+(allow ipc-posix-shm-write-data
+           (ipc-posix-name "apple.cfprefs.501v1"))

@@ -1,0 +1,165 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex))
+)
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath))
+)
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix))
+)
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal))
+)
+
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; User preference domain
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.icloudwebd")
+    (preference-domain ".GlobalPreferences")
+    (preference-domain "kCFPreferencesCurrentUser")
+    (preference-domain "kCFPreferencesAnyApplication")
+    (preference-domain "com.apple.Spotlight")
+)
+       
+(allow user-preference-read
+    (preference-domain "com.apple.photos.shareddefaults")
+    (preference-domain "com.apple.ids")
+    (preference-domain "com.apple.spotlight")
+    (preference-domain "com.apple.Accessibility")
+    (preference-domain "com.apple.facetime.bag")
+    (preference-domain "com.apple.security")
+    (preference-domain "com.apple.SpotlightResources.Defaults")
+    (preference-domain "com.apple.networkd")
+    (preference-domain "com.apple.IMCoreSpotlight")
+    (preference-domain "com.apple.appleaccount")
+)
+
+;; Filesystem read/write access
+(allow file-read* file-write*
+    (subpath (param "TMPDIR"))
+    (extension "com.apple.sandbox.application-group")
+    (subpath (param "DARWIN_CACHE_DIR"))
+    (home-subpath "/Pictures/")
+    (home-subpath "/Library/Photos/")
+    (home-subpath "/Library/Mobile Documents/")
+    (home-subpath "/Library/Application Support/")
+    (home-subpath "/Library/HTTPStorages/com.apple.icloudwebd/")
+)
+
+(let ((cache-path-filter (home-subpath "/Library/Caches/com.apple.icloudwebd")))
+    (allow file-read* file-write* cache-path-filter)
+    (allow file-issue-extension
+        (require-all
+            (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")
+            cache-path-filter
+        )
+    )
+)
+
+(allow file-read* file-write*
+    (subpath "/private/var/db/nsurlstoraged/")
+    (extension "com.apple.sandbox.container")
+)
+
+;; Filesystem read-only access
+(allow file-read*
+    (literal "/usr/libexec")
+    (home-subpath "/Library/Metadata/")
+)
+
+;; Mach services
+(allow mach-lookup
+    (global-name "com.apple.identityservicesd.desktop.auth")
+    (global-name "com.apple.identityservicesd.idquery.desktop.auth")
+    (global-name "com.apple.ak.symmetrickey.xpc")
+    (global-name "com.apple.apsd")
+    (global-name "com.apple.imfoundation.IMRemoteURLConnectionAgent")
+    (global-name "com.apple.usernotifications.listener")
+    (global-name "com.apple.usernotifications.usernotificationservice")
+    (global-name "com.apple.photos.service")
+    (global-name "com.apple.FileProvider")
+    (global-name "com.apple.bird")
+    (global-name "com.apple.bird.token")
+    (global-name "com.apple.kvsd")
+    (global-name "com.apple.cdp.agent")
+    (global-name "com.apple.cdp.daemon")
+    (global-name "com.apple.tccd")
+    (global-name "com.apple.logind")
+    (global-name "com.apple.containermanagerd")
+    (global-name "com.apple.dnssd.service")
+    (global-name "com.apple.symptom_diagnostics")
+    (global-name "com.apple.usymptomsd")
+    (global-name "com.apple.managedcorespotlightd")
+    (global-name "com.apple.spotlight.IndexAgent")
+    (global-name "com.apple.spotlight.SearchAgent")
+    (global-name "com.apple.windowserver.active")
+    (global-name "com.apple.coreservices.quarantine-resolver")
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.lsd.modifydb")
+    (global-name "com.apple.accountsd.accountmanager")
+    (global-name "com.apple.metadata.mds")
+    (global-name "com.apple.assistant.cdm")
+    (global-name "com.apple.mobileassetd.v2")
+    (global-name "com.apple.intelligenceplatform.EntityResolution")
+    (global-name "com.apple.intelligenceplatform.View")
+    (global-name "com.apple.tccd.system")
+    (global-name "com.apple.ak.anisette.xpc")
+    (global-name "com.apple.ak.auth.xpc")
+    (global-name "com.apple.AppSSO.service-xpc")
+    (global-name "com.apple.system.opendirectoryd.api")
+
+    ;; (global-name "com.apple.securityd.xpc")
+    ;; (global-name "com.apple.securityd")
+    ;; (global-name "com.apple.containermanagerd.system")
+)
+
+;; Photos spotlight
+(allow file-issue-extension
+    (require-all
+        (extension "com.apple.app-sandbox.read-write")
+        (extension-class "com.apple.photos.managedspotlightindex")
+    )
+    (require-all
+        (extension "com.apple.photos.managedspotlightindex")
+        (extension-class "com.apple.managedcorespotlightd.read-write")
+    )
+)
+
+;; IOKit
+(allow iokit-open
+    (iokit-user-client-class "RootDomainUserClient")
+)
+
+;; Network
+(system-network)
+(allow network-outbound)

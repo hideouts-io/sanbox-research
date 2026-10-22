@@ -1,0 +1,286 @@
+;;; Copyright (c) 2024 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+
+(version 1)
+
+;;; Deny defaults
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;; For Contacts
+(import "contacts.sb")
+(contacts-client (param "HOME") (param "TMPDIR"))
+
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; Your preference domain
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.duetexpertd")
+    (preference-domain "com.apple.DuetExpertCenter.AppPredictionExpert")
+    (preference-domain "com.apple.DuetExpertCenter.MagicalMoments")
+)
+
+;; Read/write access to a temporary directory
+(allow file-read* file-write*
+    (subpath (param "TMPDIR"))
+    (subpath (param "DARWIN_CACHE_DIR"))
+)
+
+;; Access to per-volume NSItemReplacementDirectory <rdar://problem/9245317>
+(allow file-read* file-write* (mount-relative-regex #"^/\.TemporaryItems(/|$)"))
+
+;; Read/write cache access
+(let ((cache-path-filter (home-subpath "/Library/Caches/com.apple.duetexpertd")))
+    (allow file-read* file-write* cache-path-filter)
+    (allow file-issue-extension
+        (require-all
+            (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")
+             cache-path-filter))
+)
+
+;; Read/write access to DuetExpertCenter directory
+(allow file-read* file-write*
+    (home-subpath "/Library/DuetExpertCenter")
+)
+
+;; Mach lookups
+(allow mach-lookup
+    (global-name-prefix "com.apple.proactive.SuggestionRequest.")
+    (global-name "com.apple.accountsd.accountmanager"
+                 "com.apple.biome.access.system"
+                 "com.apple.biome.access.user"
+                 "com.apple.biome.compute.publisher.service"
+                 "com.apple.biome.compute.source"
+                 "com.apple.biome.compute.source.user"
+                 "com.apple.biomesyncd.sync"
+                 "com.apple.CalendarAgent"
+                 "com.apple.CalendarAgent.database"
+                 "com.apple.CalendarAgent.proxy"
+                 "com.apple.CallHistorySyncHelper"
+                 "com.apple.chronoservices"
+                 "com.apple.containermanagerd"
+                 "com.apple.coreduetd.context"
+                 "com.apple.coreduetd.knowledge"
+                 "com.apple.coreduetd.knowledge.user"
+                 "com.apple.CoreLocation.agent"
+                 "com.apple.coremedia.endpoint.xpc"
+                 "com.apple.coremedia.routediscoverer.xpc"
+                 "com.apple.coremedia.routingcontext.xpc"
+                 "com.apple.coremedia.volumecontroller.xpc"
+                 "com.apple.coreservices.lsbestappsuggestionmanager.xpc"
+                 "com.apple.coreservices.quarantine-resolver"
+                 "com.apple.dmd.policy"
+                 "com.apple.donotdisturb.service"
+                 "com.apple.donotdisturb.service.non-launching"
+                 "com.apple.familycircle.agent"
+                 "com.apple.FileCoordination"
+                 "com.apple.intelligenceflow.uiContext"
+                 "com.apple.intelligenceflow.context"
+                 "com.apple.intelligenceplatform.View"
+                 "com.apple.iohideventsystem"
+                 "com.apple.iokit.powerdxpc"
+                 "com.apple.linkd.application-service"
+                 "com.apple.linkd.extension"
+                 "com.apple.linkd.mediator"
+                 "com.apple.linkd.registry"
+                 "com.apple.linkd.transcript"
+                 "com.apple.locationd.desktop.registration"
+                 "com.apple.locationd.desktop.synchronous"
+                 "com.apple.lsd.mapdb"
+                 "com.apple.lsd.modifydb"
+                 "com.apple.mediaremoted.xpc"
+                 "com.apple.metadata.mds"
+                 "com.apple.metadata.mds.index"
+                 "com.apple.metadata.mds.index.xpc"
+                 "com.apple.metadata.mds.legacy"
+                 "com.apple.mobileassetd.v2"
+                 "com.apple.MobileTimer.alarmserver"
+                 "com.apple.ModeEntityScorer"
+                 "com.apple.passd.library"
+                 "com.apple.proactive.ActionPrediction.predictions"
+                 "com.apple.proactive.HomeScreenSuggestion.xpc"
+                 "com.apple.proactive.ModeAnchorModelSuggestion.xpc"
+                 "com.apple.proactive.PersonalizationPortrait.Event"
+                 "com.apple.replicatorservices"
+                 "com.apple.routined.registration"
+                 "com.apple.sharingd.nsxpc"
+                 "com.apple.siri.VoiceShortcuts.xpc"
+                 "com.apple.spotlight.IndexAgent"
+                 "com.apple.spotlight.SearchAgent"
+                 "com.apple.system.opendirectoryd.api"
+                 "com.apple.tccd"
+                 "com.apple.tccd.system"
+                 "com.apple.usernoted.prefs"
+                 "com.apple.usernotifications.listener"
+                 "com.apple.usernotifications.usernotificationsettingsservice"
+                 "com.apple.watchlistd.xpc"
+                 "com.apple.ProactiveSummarization.server"
+                 "com.apple.duetactivityscheduler"
+                 "com.apple.cmfsyncagent.auth"
+                 "com.apple.ProgressReporting"
+                 "com.apple.toolbox.indexing-service"
+                 "com.apple.pluginkit.pkd"
+                 "com.apple.coreservices.launchservicesd"
+                 "com.apple.intelligenceflow.contextTool"
+                 "com.apple.TextUnderstanding.process"
+                 "com.apple.generativesearch.server.search"
+                 "com.apple.generativeexperiences.agentSessionStore"
+                 "com.apple.mediaanalysisd.service.public"
+                 "com.apple.financed.service.coredatastore"
+                 "com.apple.financed.service.store"
+                 "com.apple.campo"
+                 "com.apple.telephonyutilities.callservicesdaemon.callcapabilities"
+                 "com.apple.photos.service")
+)
+
+;; Allow Launch Services open API (required for macOS app launching)
+(allow lsopen)
+
+;; Allow reading libexec directory
+(allow file-read*
+    (literal "/usr/libexec")
+    (literal "/usr/libexec/duetexpertd")
+)
+
+;; Allow reading app info
+(allow file-read* (regex #"\.app(/.*)?$"))
+
+;; Individual files
+(allow file-read*
+    (literal "/Library/Preferences/com.apple.networkd.plist")
+)
+
+;; Allow IOKit user client
+(allow iokit-open
+    (iokit-user-client-class "AppleKeyStoreUserClient")
+)
+
+;; CoreDuet
+(allow process-info-pidinfo (target others))
+(allow file-read* file-write*
+    (subpath "/private/var/db/CoreDuet/Knowledge")
+)
+
+;; Call history
+(allow file-read*
+    (home-subpath "/Library/Application Support/CallHistoryDB")
+)
+
+;; Interaction store
+(allow mach-lookup
+    (global-name "com.apple.coreduetd.people"))
+(allow file-read*
+    (literal "/private/var/db/CoreDuet/People/interactionC.db")
+    (literal "/private/var/db/CoreDuet/People/interactionC.db-shm")
+    (literal "/private/var/db/CoreDuet/People/interactionC.db-wal"))
+(allow file-write*
+    (literal "/private/var/db/CoreDuet/People/interactionC.db-shm"))
+
+;; Mail VIPs
+(allow file-read*
+    (home-subpath "/Library/Mail")
+)
+
+;; ToolKit
+(allow file-read* file-write*
+    (home-subpath "/Library/Shortcuts")
+)
+
+;; App Intent transcript
+(allow file-read*
+    (home-regex "/Library/Daemon Containers/[^/]+/Data/ActionTranscript(/|$)")
+    (home-regex "/Library/Daemon Containers/[^/]+/Data/database/linkd.metadatastore.sqlite3")
+    (home-regex "/Library/Daemon Containers/[^/]+/Data/database/linkd.metadatastore.sqlite3-shm")
+    (home-regex "/Library/Daemon Containers/[^/]+/Data/database/linkd.metadatastore.sqlite3-wal")
+)
+(allow file-read* file-write* (home-regex "/Library/Daemon Containers/[^/]+/Data/database/linkd.metadatastore.sqlite3-shm"))
+
+;; Allow issuing readonly sandbox file extensions
+(allow file-issue-extension
+    (extension-class "com.apple.app-sandbox.read")
+)
+
+;; Trial
+(allow file-read*
+    (home-subpath "/Library/Trial/NamespaceDescriptors")
+    (home-subpath "/Library/Trial/Treatments")
+)
+
+;; Widget Relevance Caches
+(allow file-read*
+    (home-subpath "/Library/Caches/com.apple.chrono/widget-relevance-cache")
+)
+
+;; PET
+(allow file-read* file-write*
+    (home-subpath "/Library/Caches/com.apple.proactive.eventtracker")
+)
+
+;; Read only defaults
+(allow user-preference-read
+    (preference-domain "com.apple.CoreDuet")
+    (preference-domain "com.apple.coremedia")
+    (preference-domain "com.apple.iCal")
+    (preference-domain "com.apple.lockscreen.shared")
+    (preference-domain "com.apple.mediaremote")
+    (preference-domain "com.apple.SpotlightFoundation")
+    (preference-domain "com.apple.spotlightui")
+    (preference-domain "com.apple.duetexpertd.assistantActionSuggestion")
+    (preference-domain "com.apple.suggestions")
+    (preference-domain "com.apple.WatchListKit")
+    (preference-domain "kCFPreferencesAnyApplication")
+    (preference-domain "com.apple.spotlight")
+)
+
+;; Allow reading app category extended attributes for app categorization
+(allow file-read-xattr
+    (xattr "app_categories")
+)
+
+;; Post distributed notifications
+(allow distributed-notification-post)
+
+;; Consume sandbox extensions
+(with-filter (extension "com.apple.app-sandbox.read")
+    (allow file-read*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read")))
+(with-filter (extension "com.apple.app-sandbox.read-write")
+    (allow file-read* file-write*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")))
+
+;; For embeddings
+(allow iokit-open
+    (iokit-user-client-class "AGXSharedUserClient")
+    (iokit-user-client-class "AGXCommandQueue")
+    (iokit-user-client-class "AGXDeviceUserClient"))

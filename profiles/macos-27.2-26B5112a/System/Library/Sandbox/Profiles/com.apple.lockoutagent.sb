@@ -1,0 +1,45 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+
+(version 1)
+
+(deny default)
+
+(allow user-preference-read (preference-domain
+                        "com.apple.LockoutAgent"
+                        "kCFPreferencesAnyApplication"))
+
+(allow mach-lookup (global-name
+                        "com.apple.bsd.dirhelper"
+                        "com.apple.cfprefsd.agent"
+                        "com.apple.cfprefsd.daemon"
+                        "com.apple.CoreServices.coreservicesd"
+                        "com.apple.coreservices.launchservicesd"
+                        "com.apple.ctcategories.service"
+                        "com.apple.diagnosticd"
+                        "com.apple.distributed_notifications@Uv3"
+                        "com.apple.dmd.policy"
+                        "com.apple.lsd.mapdb"
+                        "com.apple.ManagedSettingsAgent"
+                        "com.apple.ScreenTimeAgent"
+                        "com.apple.ScreenTimeAgent.private"
+                        "com.apple.ScreenTimeSettingsAgent.private"
+                        "com.apple.siri.context.service"
+                        "com.apple.system.opendirectoryd.membership"
+                        "com.apple.windowserver.active"))
+
+(allow ipc-posix-shm-read*
+    (ipc-posix-name-regex #"^apple\.cfprefs\."))
+
+(allow iokit-open (iokit-user-client-class "AppleAPFSUserClient"))
+
+(allow file-read*)
+
+(allow file-write*
+    (subpath (param "TMPDIR"))
+    (subpath (param "DARWIN_USER_DIR")))
+
+(allow sysctl-read)
+
+;; HFSIOC_SET_HOTFILE_STATE
+(allow system-fsctl (fsctl-command (_IO "h" 47)))

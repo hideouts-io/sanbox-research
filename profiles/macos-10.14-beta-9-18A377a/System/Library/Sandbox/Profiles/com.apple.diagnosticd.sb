@@ -1,0 +1,30 @@
+;; Copyright (c) 2013 Apple Inc.  All Rights reserved.
+;;
+;; WARNING: The sandbox rules in this file currently constitute
+;; Apple System Private Interface and are subject to change at any time and
+;; without notice.
+;;
+
+(version 1)
+
+;; this is not active yet due to debugging issues
+(deny default (no-callout))
+(import "system.sb")
+
+(deny mach-lookup
+    (global-name "com.apple.CoreServices.coreservicesd")
+    (with no-log)
+)
+
+;; restrict where we write
+(allow file-write*
+    ;; current trace files
+    (regex
+        #"^(/private)?/var/db/diagnostics(/|$)"
+    )
+
+    ;; additional required
+    (literal "/dev/dtracehelper")
+    (literal "/dev/null")
+    (literal "/dev/random")
+)

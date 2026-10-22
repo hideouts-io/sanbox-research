@@ -1,0 +1,55 @@
+;;;;;; Helper functions containing rules required to run a process
+;;;;;; with address/thread sanitizer.
+;;;;;;
+;;;;;; This file should always stay a pure import:
+;;;;;; it should not emit any sandbox rules!
+;;;;;;
+;;;;;; Copyright (c) 2026 Apple Inc.  All Rights reserved.
+;;;;;;
+;;;;;; WARNING: The sandbox rules in this file currently constitute
+;;;;;; Apple System Private Interface and are subject to change at any time and
+;;;;;; without notice.
+
+(define (sanitizer-support . options)
+  (allow syscall-unix
+         (syscall-number SYS_sigaltstack       ; __sanitizer::InstallDeadlySignalHandlers
+                         SYS_getrlimit         ; DisableCoreDumperIfNecessary
+                         SYS_setrlimit         ; DisableCoreDumperIfNecessary
+                         SYS_sigaction         ; MaybeInstallSigaction
+                         SYS_sigprocmask       ; internal_start_thread
+                         SYS___pthread_sigmask ; internal_start_thread
+                         SYS___pthread_kill))  ; abort
+  (allow syscall-mig
+         (kernel-mig-routine task_set_exc_guard_behavior ; Avoid triggering EXC_GUARD exceptions (rdar://50815816).
+                             mach_vm_region_recurse))    ; Inspect existing mappings when mapping shadow.
+  (allow sysctl-read
+         (sysctl-name "hw.pagesize_compat"
+                      "kern.osrelease"
+                      "vm.all_map_ranges"
+                      "vm.vm_map_user_range_debug"))
+  (allow sysctl*
+         (sysctl-name "vm.debug_range_enabled"))
+  ;; Load and map the sanitizer runtime at its default Apple-internal path.
+  (with-filter (system-attribute apple-internal)
+    (allow file-test-existence file-read* file-map-executable
+           (subpath "/usr/appleinternal/lib/sanitizers")))
+
+  ;; atos support (not enabled by default)
+  ;; TODO: rdar://168202225 (Sanitizers should be able to symbolize in sandboxed processes)
+  (unless (memq 'no-posix-spawn options)
+    (with-filter (system-attribute apple-internal)
+      (allow syscall-unix
+             (syscall-number SYS_posix_spawn
+                             SYS_wait4
+                             SYS_read
+                             SYS_pipe))
+
+      (allow file-test-existence file-read*
+             (literal "/usr/bin/atos"
+                      "/usr/lib/dyld"))
+      (allow process-fork)
+      ;; TODO: rdar://168202225 -- these rules are not sufficient for atos to spawn,
+      ;; but not run, since it inherits the sandbox.
+      (allow process-exec
+             (literal "/usr/bin/atos"))
+      (allow process-info* (target same-sandbox)))))

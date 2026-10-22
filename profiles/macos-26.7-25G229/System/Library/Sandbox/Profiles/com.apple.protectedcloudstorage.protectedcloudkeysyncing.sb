@@ -1,0 +1,90 @@
+;;; Copyright (c) 2024 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; Your preference domain
+(allow user-preference-read user-preference-write
+       (preference-domain "com.apple.protectedcloudstorage.protectedcloudkeysyncing"))
+
+(allow file-read*)
+
+;; Read/write access to a temporary directory.
+(allow file-read* file-write*
+    (subpath (param "HOME"))
+    (subpath (param "_TMPDIR"))
+    (subpath (param "_DARWIN_CACHE_DIR")))
+
+;; Other read/write paths
+(allow file-read* file-write*
+        (home-subpath "/Library/Application Support"))
+
+
+(allow mach-lookup (with report))
+
+;; Mach lookups
+(allow mach-lookup
+    (global-name "com.apple.accountsd.accountmanager")
+    (global-name "com.apple.ak.auth.xpc")
+    (global-name "com.apple.apsd")
+    (global-name "com.apple.cdp.daemon")
+    (global-name "com.apple.cloudd")
+    (global-name "com.apple.corefollowup.agent")
+    (global-name "com.apple.distributed_notifications@Uv3")
+    (global-name "com.apple.PowerManagement.control")
+    (global-name "com.apple.SecureBackupDaemon")
+    (global-name "com.apple.SecureBackupDaemon.concurrent")
+    (global-name "com.apple.security.octagon")
+    (global-name "com.apple.securityd.general")
+    (global-name "com.apple.securityd.xpc")
+    (global-name "com.apple.securityd.systemkeychain")
+    (global-name "com.apple.securityd.ckks")
+    (global-name "com.apple.SecurityServer")
+    (global-name "com.apple.symptom_diagnostics")
+    (global-name "com.apple.SystemConfiguration.configd")
+    (global-name "com.apple.windowserver.active"))
+
+(allow ipc-posix-shm
+       (ipc-posix-name "apple.shm.notification_center")
+       (ipc-posix-name "com.apple.AppleDatabaseChanged"))
+
+(allow user-preference-read
+       (preference-domain "kCFPreferencesAnyApplication"))
+
+(allow iokit-open
+       (iokit-user-client-class "AppleAPFSUserClient")
+       (iokit-user-client-class "AppleKeyStoreUserClient"))

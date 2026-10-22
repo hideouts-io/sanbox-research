@@ -1,0 +1,14 @@
+;; OS X only profile
+
+(version 1)
+(deny default)
+
+(import "system.sb")
+
+(allow user-preference-read
+    (preference-domain "com.apple.bird.containers.notifications")
+)
+
+(allow mach-lookup
+    (global-name "com.apple.duetactivityscheduler")
+)

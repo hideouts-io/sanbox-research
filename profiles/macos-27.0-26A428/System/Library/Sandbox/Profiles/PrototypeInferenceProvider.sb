@@ -1,0 +1,92 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+(allow mach-lookup
+    (global-name "com.apple.usymptomsd")
+    (global-name "com.apple.biome.access.user") ; For GenerativeFunctionsInstrumentation
+    (global-name "com.apple.biome.access.system")
+    (global-name "com.apple.dnssd.service")
+    (global-name "com.apple.AppSSO.service-xpc")
+    (global-name "com.apple.SecurityServer")
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.tccd.system")
+    (global-name "com.apple.windowserver.active")
+    (global-name "com.apple.coreservices.launchservicesd")
+    (global-name "com.apple.ist.ds.appleconnect2.service.agent") ; For AppleConnect authentication (rdar://171851173)
+    (global-name "com.apple.ist.ds.service.rlogd")               ; AC remote logging; may not be needed but untestable until rdar://172218036
+)
+
+(allow file-read*
+    (subpath "/private/var/db/modelmanagerd/Library")
+    (subpath "/AppleInternal/Library/ExtensionKit/Extensions/PrototypeInferenceProvider.appex")
+    (subpath "/private/var/db/modelmanagerd")
+    (subpath "/Library/Preferences/com.apple.networkd.plist")
+    (subpath "/private/var/db/mds/messages/se_SecurityMessages")
+    (subpath "/Library/Keychains/System.keychain")
+    (subpath "/private/var/db/automation")
+    (subpath "/AppleInternal/IntelligenceFlow/Floodgate")
+    (subpath "/private/etc/hosts")
+    (subpath "/Library/Frameworks/AppleConnect.framework") ; rdar://171851173
+    (subpath "/AppleInternal/Library/GenerativeAgents") ; floodgate certs
+    (subpath "/AppleInternal/PrototypeInferenceProvider/Floodgate/certs") ; PSD certs
+)
+
+;; Allow dlopen of AppleConnect.framework for macOS authentication (rdar://171851173)
+(allow file-map-executable
+    (subpath "/Library/Frameworks/AppleConnect.framework")
+)
+
+;; (allow file-write*
+;;        (subpath "/private/var/db/modelmanagerd/Library/Preferences/com.apple.GenerativeFunctions.PrototypeInferenceProvider.plist")
+;; )
+
+(allow network-outbound)
+
+(with-filter (extension-class "com.apple.cfprefsd.read" "com.apple.cfprefsd.read-write")
+  (allow file-issue-extension
+    (require-any
+         (subpath "/private/var/db/modelmanagerd/Library/Preferences"))))
+
+(allow system-socket (socket-domain AF_SYSTEM))
+
+(allow ipc-posix-shm*
+       (ipc-posix-name "com.apple.AppleDatabaseChanged")
+)
+
+(allow user-preference-read
+    (preference-domain "kcfpreferencesanyapplication")
+    (preference-domain "com.apple.gms.prototypeinferenceprovider")
+)
+
+(allow iokit-open-user-client
+       (iokit-user-client-class "AppleKeyStoreUserClient")
+       (iokit-user-client-class "IOSurfaceRootUserClient") ; IOSurface lookup for VI image handling
+)
+
+(allow file-write*
+       (subpath "/private/var/db/modelmanagerd/Library/Preferences/com.apple.GenerativeFunctions.PrototypeInferenceProvider.plist")
+       (subpath "/private/tmp/pip-debug")
+)

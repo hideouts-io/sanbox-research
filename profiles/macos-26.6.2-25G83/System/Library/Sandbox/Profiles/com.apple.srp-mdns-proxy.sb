@@ -1,0 +1,113 @@
+;
+; Copyright (c) 2012-2024 Apple Inc. All rights reserved.
+;
+; Redistribution and use in source and binary forms, with or without
+; modification, are permitted provided that the following conditions are met:
+;
+; 1.  Redistributions of source code must retain the above copyright notice,
+;     this list of conditions and the following disclaimer.
+; 2.  Redistributions in binary form must reproduce the above copyright notice,
+;     this list of conditions and the following disclaimer in the documentation
+;     and/or other materials provided with the distribution.
+; 3.  Neither the name of Apple Inc. ("Apple") nor the names of its
+;     contributors may be used to endorse or promote products derived from this
+;     software without specific prior written permission.
+;
+; THIS SOFTWARE IS PROVIDED BY APPLE AND ITS CONTRIBUTORS "AS IS" AND ANY
+; EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+; WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+; DISCLAIMED. IN NO EVENT SHALL APPLE OR ITS CONTRIBUTORS BE LIABLE FOR ANY
+; DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+; (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+; ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+;
+;############################################################################
+
+
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+(allow process-info-codesignature)
+
+; Mach communications
+; These are needed for things like getpwnam, hostname changes, & keychain
+(allow mach-lookup
+       (global-name "com.apple.private.fillmore.AccessoryInfo.modification")
+       (global-name "com.apple.private.fillmore.service.add")
+       (global-name "com.apple.private.fillmore.service.remove")
+       (global-name "com.apple.private.fillmore.prefix.modification")
+       (global-name "com.apple.private.ctr.thread")
+       (global-name "com.apple.securityd.systemkeychain")
+       (global-name "com.apple.SecurityServer")
+       (global-name "com.apple.SystemConfiguration.configd")
+       (global-name "com.apple.securityd")
+       (global-name "com.apple.securityd.xpc")
+       (global-name "com.apple.wpantund.xpc")
+       (global-name "com.apple.network.IPConfiguration")
+       (global-name "com.apple.mDNSResponder.control")
+       (global-name "com.apple.pfd")
+       (global-name "com.apple.mDNSResponder_Helper")
+       (global-name "com.apple.networkrelay")
+       (global-name "com.apple.terminusd"))
+
+; Networking, including Unix Domain Sockets
+(allow network*)
+
+; Raw sockets
+(if (defined? 'system-socket)
+    (allow system-socket))
+
+; Hardware model information
+(allow sysctl-read)
+
+(allow ipc-posix-shm-read* ipc-posix-shm-write*
+       (ipc-posix-name "com.apple.AppleDatabaseChanged"))
+
+(allow user-preference-read
+    (preference-domain "com.apple.security")
+    (preference-domain "kCFPreferencesAnyApplication"))
+
+(allow file-read*
+       (literal "/Library/Preferences/com.apple.networkd.plist")
+       (literal "/private/var/db/DetachedSignatures")
+       (literal "/private/var/db/mds/system/mds.lock")
+       (literal "/private/var/db/mds/system/mdsDirectory.db")
+       (literal "/private/var/db/mds/system/mdsObject.db")
+       (literal "/private/var/db/mds/messages/se_SecurityMessages")
+       (literal "/Library/Preferences/com.apple.security.plist")
+       ; (literal "/Library/Keychains/System.keychain")
+       (literal "/usr/libexec/srp-mdns-proxy")
+       (literal "/usr/libexec")
+       (literal "/usr/local/bin/srp-test-server")
+       (literal "/usr/local/bin")
+       (literal "/dev/fd"))
+
+(allow file-write*
+       (literal "/private/var/db/DetachedSignatures")
+       (literal "/private/var/db/mds/system/mds.lock"))
+
+; For MAC Address
+(allow system-info (info-type "net.link.addr"))
+
+; <rdar://problem/65700296> mDNSResponder sandbox profile needs to allow loading dylibs from /usr/appleinternal/lib/sanitizers
+(with-filter (system-attribute apple-internal)
+    (allow file-read* file-map-executable
+               (subpath "/usr/appleinternal/lib/sanitizers/")))
+
+(allow sysctl-write
+    (sysctl-name "net.inet6.ip6.forwarding"))

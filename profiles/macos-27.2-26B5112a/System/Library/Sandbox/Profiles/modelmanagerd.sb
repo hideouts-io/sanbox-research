@@ -1,0 +1,101 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(allow process-info* (target self))
+(allow process-info-pidinfo (target others))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; modelmanagerd's preference domain
+(allow user-preference-read user-preference-write
+       (preference-domain "com.apple.modelmanager"))
+
+(with-filter (extension "com.apple.app-sandbox.read")
+  (allow file-read*)
+  (allow file-issue-extension (extension-class "com.apple.app-sandbox.read")))
+
+(with-filter (extension "com.apple.app-sandbox.read-write")
+  (allow file-read* file-write*)
+  (allow file-issue-extension (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")))
+
+;; For GMS Instrumentation
+(allow user-preference-read
+       (preference-domain "com.apple.GenerativeFunctions.GenerativeFunctionsInstrumentation"))
+(allow mach-lookup
+    (global-name "com.apple.biome.access.user")
+    (global-name "com.apple.biome.access.system")
+    (global-name "com.apple.biome.compute.source.user")
+)
+
+;; For general GMS needs
+(allow mach-lookup
+    (global-name "com.apple.modelcatalog.catalog")
+    (global-name "com.apple.siri.uaf.service")
+    (global-name "com.apple.mobileasset.autoasset")
+    (global-name "com.apple.mobileassetd.v2")
+)
+(allow file-read*
+    (subpath "/private/var/db/com.apple.modelcatalog/sideload")
+    (subpath "/System/Library/AssetsV2")
+    (subpath "/private/var/MobileAsset/PreinstalledAssetsV2/InstallWithOs")
+    (subpath "/System/Library/PreinstalledAssetsV2/RequiredByOs")
+    (subpath "/private/var/db/os_eligibility/eligibility.plist")
+    (subpath "/private/var/db/com.apple.countryd/countryCodeCache.plist")
+    (subpath "/Library/Trial")
+)
+
+;; For ModelManager virtualization features
+(allow mach-lookup
+    (global-name "com.apple.modelmanager.remote")
+    (global-name "com.apple.remoted.control")
+    (global-name "com.apple.remoted")
+)
+
+;; For other daemon mach-lookup needs
+(allow mach-lookup
+    (global-name "com.apple.powerlog.plxpclogger.xpc")
+    (global-name "com.apple.ctkd.token-client")
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.PowerManagement.control")
+)
+
+;; For other daemon preferences
+(allow user-preference-read
+    (preference-domain "com.apple.UnifiedAssetFramework")
+    (preference-domain "kCFPreferencesAnyApplication")
+)
+
+;; For testing and other daemon file-read-data needs
+(allow file-read-data
+    (subpath "/AppleInternal/Library/ModelManager/Policy.plist")
+    (subpath "/usr/libexec")
+    (subpath "/AppleInternal/Library/ExtensionKit/Extensions")
+    (subpath "/AppleInternal/Tests/ModelManager/Utilities")
+    (subpath "/System/Library/CoreServices")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_CN_GuardrailFramework")
+    (subpath "/AppleInternal/Assets/SecureMobileAssets/com.apple.MobileAsset.CN.GuardrailFramework/com.apple.rsa.wrapperapp.generic/Source/Applications")
+)
+
+(allow iokit-open-user-client
+    (iokit-user-client-class "AppleKeyStoreUserClient")
+    (iokit-user-client-class "ANEClientHintsUserClient")
+)

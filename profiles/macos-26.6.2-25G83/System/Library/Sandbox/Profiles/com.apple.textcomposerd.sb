@@ -1,0 +1,112 @@
+;;; Copyright (c) 2025 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+(allow process-info* (target self))
+(allow process-info-dirtycontrol (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; Specific preference domain for textcomposerd
+(allow user-preference-read user-preference-write
+       (preference-domain "com.apple.textcomposer"))
+       
+;; ModelCatalog, UnifiedAssets, and MobileAssets
+(allow user-preference-read
+    (preference-domain "com.apple.UnifiedAssetFramework")
+    (preference-domain "com.apple.modelcatalog.ajax")
+)
+
+;; GenerativeModels
+(allow user-preference-read
+    (preference-domain "com.apple.GenerativeFunctions.GenerativeFunctionsInstrumentation")
+    (preference-domain "kCFPreferencesAnyApplication")
+)
+
+(allow user-preference-read
+    (preference-domain "com.apple.assistant.backedup")
+    (preference-domain "com.apple.EmojiPreferences")
+    (preference-domain "com.apple.AppSupport")
+    (preference-domain "com.apple.GenerativeFunctions.GenerativeFunctionsInstrumentation")
+)
+       
+(allow managed-preference-read (preference-domain "kCFPreferencesAnyApplication"))
+
+;; Access to Mach services
+(allow mach-lookup
+    (global-name "com.apple.generativeexperiences.textcomposition")
+    (global-name "com.apple.generativeexperiences.externaltextcomposition")
+)
+
+;; Read/write access to a temporary directory.
+(allow file-read* file-write*
+       (subpath (param "TMPDIR"))
+       (subpath (param "DARWIN_CACHE_DIR"))
+       (mount-relative-literal "/.TemporaryItems"))
+       
+;; ModelCatalog, UnifiedAssets, and MobileAssets
+(allow mach-lookup
+    (global-name "com.apple.modelcatalog.catalog")
+    (global-name "com.apple.mobileasset.autoasset")
+    (global-name "com.apple.mobileassetd.v2")
+    (global-name "com.apple.siri.uaf.service")
+)
+
+;; GenerativeModels
+(allow mach-lookup
+    (global-name "com.apple.modelmanager")
+    (global-name "com.apple.biome.access.user")
+)
+       
+(allow file-read*
+    (subpath "/private/var/db/com.apple.modelcatalog/sideload/")
+    (subpath "/System/Library/AssetsV2/locks/com.apple.UnifiedAssetFramework/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_FM_GenerativeModels/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_FM_Overrides/purpose_auto/")
+    (subpath "/System/Library/PreinstalledAssetsV2/RequiredByOs/com_apple_MobileAsset_UAF_FM_GenerativeModels/")
+    (subpath "/System/Library/PreinstalledAssetsV2/RequiredByOs/com_apple_MobileAsset_UAF_FM_Overrides/")
+)
+
+;; Consume sandbox extensions
+(with-filter (extension "com.apple.app-sandbox.read")
+    (allow file-read*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read")))
+(with-filter (extension "com.apple.app-sandbox.read-write")
+    (allow file-read* file-write*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")))
+
+;; Required by Metal (125737511)
+(allow file-read* file-write*
+    (home-subpath "/Library/Caches/com.apple.textcomposerd/")
+)

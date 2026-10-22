@@ -1,0 +1,30 @@
+;;;
+;;; Sandbox profile for mdworker_shared (Spotlight file metadata server worker)
+;;; used when hosting Application.mdimporter
+;;;
+;;; /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mdworker_shared
+;;;     /System/Library/Spotlight/Application.mdimporter
+;;;
+;;; Copyright (c) 2006–2026 Apple Inc. All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+
+(version 1)
+
+(import "mdworker.sb")
+
+;; Assess app bundle code signing and security policy
+
+(allow file-read* (literal "/Library/Preferences/com.apple.security.plist"))
+
+(if (positive? (string-length (param "_HOME")))
+    (begin
+        (allow file-read* (home-literal "/Library/Preferences/com.apple.security.plist"))
+        (allow file-read* (home-literal "/Library/Preferences/com.apple.security.revocation.plist"))))
+
+(allow mach-lookup
+    (global-name "com.apple.SecurityServer")
+    (global-name "com.apple.security.syspolicy"))

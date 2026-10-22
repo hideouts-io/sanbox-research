@@ -1,0 +1,85 @@
+(version 1)
+
+(deny default)
+
+(import "system.sb")
+
+(system-network)
+
+(define (home-regex home-relative-regex)
+       (regex (string-append "^" (regex-quote (param "_HOME")) home-relative-regex)))
+(define (home-literal home-relative-literal)
+       (literal (string-append (param "_HOME") home-relative-literal)))
+
+(allow file-read-metadata)
+
+(allow file-read*
+       (home-literal "")
+       (home-literal "/Library/Preferences/.GlobalPreferences.plist")
+       (home-literal "/Library/Preferences/com.apple.icloud.findmydeviced.findmydevice-user-agent.plist")
+
+       (literal "/Library/Preferences/.GlobalPreferences.plist")
+       (literal "/AppleInternal")
+       (literal "/usr/libexec")
+       (literal "/usr/libexec/findmydevice-user-agent")
+
+       (home-regex #"/Library/Preferences/ByHost/\.GlobalPreferences\.[-\w.]*"))
+
+(allow file-write*
+       (home-literal "")
+       (home-literal "/Library/Preferences/com.apple.icloud.findmydeviced.notbackedup.plist"))
+
+(allow file-read* file-write*
+    (home-literal "/Library/Keychains")
+    (extension "com.apple.sandbox.application-group"))
+
+(allow user-preference-read user-preference-write
+    (preference-domain "kCFPreferencesAnyApplication")
+    (preference-domain "com.apple.icloud.findmydeviced.findmydevice-user-agent")
+    (preference-domain "com.apple.CloudKit")
+)
+
+(allow mach-lookup
+       (global-name "com.apple.accountsd.accountmanager")
+       (global-name "com.apple.duetactivityscheduler")
+       (global-name "com.apple.distributed_notifications@Uv3")
+       (global-name "com.apple.icloud.findmydeviced")
+       (global-name "com.apple.icloud.findmydeviced.ua-services")
+       (global-name "com.apple.CoreServices.coreservicesd")
+       (global-name "com.apple.distributed_notifications")  
+       (global-name "com.apple.UNCUserNotification")
+       (global-name "com.apple.securityd.ckks")
+       (global-name "com.apple.securityd.xpc")
+       (global-name "com.apple.security.octagon")
+       (global-name "com.apple.identityservicesd.desktop.auth")
+       (global-name "com.apple.containermanagerd")
+       (global-name "com.apple.SecurityServer")
+       (global-name "com.apple.SystemConfiguration.configd")
+       (global-name "com.apple.cloudd")
+       (global-name "com.apple.containermanagerd")
+       (global-name "com.apple.ak.anisette.xpc")
+       (global-name "com.apple.ak.auth.xpc")
+       (global-name "com.apple.apsd")
+       (global-name "com.apple.icloud.searchpartyuseragent.ownersession")
+       (global-name "com.apple.icloud.searchpartyuseragent.beaconmanager")
+       (global-name "com.apple.icloud.searchpartyuseragent.beaconmanager.simplebeacon")
+       (global-name "com.apple.tvremotecore.xpc")
+       (global-name "com.apple.server.bluetooth.general.xpc")
+       (global-name "com.apple.server.bluetooth.le.att.xpc")
+       (global-name "com.apple.bluetooth.xpc")
+       (global-name "com.apple.usernotifications.listener")
+       (global-name "com.apple.usernotifications.usernotificationservice")
+       (global-name "com.apple.windowserver.active")
+       (global-name "com.apple.tccd")
+       (global-name "com.apple.timed.xpc")
+       (global-name "com.apple.server.bluetooth.general.xpc")
+       (global-name "com.apple.server.bluetooth.le.att.xpc")
+       (global-name "com.apple.locationd.desktop.registration")
+       (global-name "com.apple.locationd.desktop.synchronous")
+       (global-name "com.apple.cfnetwork.cfnetworkagent")
+       (global-name "com.apple.CoreAuthentication.agent"))
+
+(allow authorization-right-obtain
+       (right-name "admin"))
+
+(allow network-outbound)

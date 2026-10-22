@@ -1,0 +1,120 @@
+;;
+;; com.apple.security.XPCTimeStampingService.sb
+;;
+;; Sandbox profile for XPCTimeStampingService — invariant (v) of the
+;; XPC network-service sandbox-bypass class fix (rdar://177979759).
+;;
+;; STATUS: TELEMETRY-STAGED FORM (post-VM-iteration).
+;;
+;; This file ships with explicit allows for operations observed during
+;; VM iteration of an XPC driver exercising the TSA flow, plus
+;; `(allow X (with telemetry))` on the residual surface (file*, mach-lookup,
+;; ipc-posix, process-info*, iokit-*, dynamic-code-generation). The XPC
+;; service remains fully functional in production. Telemetry events flow
+;; kernel → RTCReporting → Splunk for the SU follow-on radar, which
+;; analyzes one internal release cycle of data and either folds new
+;; legitimate operations into the explicit-allow list above or flips the
+;; remaining residual surface to `(deny X)`.
+;;
+;; Side-finding from VM iteration: the debug-only (`#ifndef NDEBUG`) response
+;; dump in main-tsa.m used to write to `/private/tmp/tsaresp.rsp` — a fixed
+;; shared-tmp path, world-readable. Repointed at NSTemporaryDirectory()
+;; (per-service _TMPDIR resolved by enter_sandbox()) so debug builds no
+;; longer leak. The sandbox profile no longer needs an allow for that path.
+;;
+;; References:
+;;   - trust/trustd/macOS/com.apple.trustd.sb (sister daemon — same shape)
+;;
+
+(version 1)
+
+(deny default)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(allow process-info* (target self))
+
+;; XPC peer introspection — `main-tsa.m` calls `xpc_connection_get_pid(peer)`
+;; on incoming connections for `xpctsaDebug` pid logging (entitlement check
+;; uses the audit token via SecXPCCallerHasNetworkEntitlement, not pidinfo).
+(allow process-info-pidinfo)
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; Read/write access to the per-service temporary and cache directories.
+;; main-tsa.m's enter_sandbox() resolves these via _CS_DARWIN_USER_TEMP_DIR /
+;; _CS_DARWIN_USER_CACHE_DIR with the suffix com.apple.security.XPCTimeStampingService.
+(allow file-read* file-write*
+    (subpath (param "_TMPDIR"))
+    (subpath (param "_DARWIN_CACHE_DIR")))
+
+;; Read access for system preferences. Narrow further as needed.
+(allow user-preference-read
+    (preference-domain "kCFPreferencesAnyApplication")
+    (preference-domain "com.apple.security")
+    (preference-domain ".GlobalPreferences"))
+
+(allow ipc-posix-shm
+    (ipc-posix-name "com.apple.AppleDatabaseChanged"))
+
+;; --------------------------------------------------------------------------
+;; Network egress. Per the rdar://177979759 design, ephemeral NSURLSession
+;; (Gate B) makes connections in-process — the XPC service's own profile
+;; governs every socket it opens.
+;;
+;; common.sb is iOS-only — its `(network-client (remote tcp))` macro would
+;; have expanded to `(allow-network-common)` + the TCP filter + a few more
+;; mach-lookups (com.apple.networkd etc.). On macOS we inline the subset of
+;; that expansion that CFNetwork actually exercises for an outbound HTTP/S
+;; request — see Apple's imports/common.sb `(define-once (allow-network-common))`.
+;; This preserves the egress tightening (no arbitrary UDP, no raw sockets)
+;; while keeping the dependencies CFNetwork needs.
+;; --------------------------------------------------------------------------
+
+(allow network-outbound (remote tcp))            ;; HTTP/1.1, HTTP/2
+(allow network-outbound (remote udp "*:443"))    ;; QUIC / HTTP/3
+(allow network-outbound (literal "/private/var/run/mDNSResponder"))  ;; DNS Unix socket
+(allow system-socket
+    (require-all (socket-domain AF_SYSTEM) (socket-protocol 2)))     ;; SYSPROTO_CONTROL
+(allow system-socket (socket-domain AF_ROUTE))   ;; getifaddrs
+
+(allow mach-lookup
+    (global-name "com.apple.AppSSO.service-xpc")
+    ;; DNS resolution path:
+    (global-name "com.apple.dnssd.service")
+    ;; CFNetwork connection setup / VPN routing:
+    (global-name "com.apple.networkd")
+    ;; SystemConfiguration framework (CFNetwork dependency):
+    (global-name "com.apple.SystemConfiguration.configd")
+    ;; Network symptoms reporting (used by CFNetwork on failures):
+    (global-name "com.apple.symptomsd")
+    (global-name "com.apple.usymptomsd")
+    ;; TLS chain validation (for TSA-over-HTTPS — RFC 3161 §3.4 permits HTTP,
+    ;; but legitimate TSAs commonly use HTTPS):
+    (global-name "com.apple.trustd")
+    (global-name "com.apple.trustd.agent"))
+
+;; networkd reads its config from this preference file.
+(allow file-read*
+    (literal "/private/var/preferences/com.apple.networkd.plist"))
+
+;; --------------------------------------------------------------------------
+;; TELEMETRY RESIDUAL — operations not explicitly allowed above but allowed
+;; for now, with kernel-emitted telemetry events for the SU follow-on radar.
+;; The follow-on radar will fold legitimate cases into the explicit-allow
+;; list above and flip the rest to `(deny X)` after one internal release
+;; cycle of clean telemetry.
+;; --------------------------------------------------------------------------
+
+(allow (with telemetry) file-read-data file-read-metadata)
+(allow (with telemetry) file-write*)
+(allow (with telemetry) mach-lookup)
+(allow (with telemetry) ipc-posix*)
+(allow (with telemetry) process-info*)
+(allow (with telemetry) iokit-open iokit-get-properties)
+(allow (with telemetry) dynamic-code-generation)
+(allow (with telemetry) file-map-executable)
+(allow (with telemetry) nvram*)

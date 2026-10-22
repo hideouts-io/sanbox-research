@@ -1,0 +1,141 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+;; replace `deny` with allow (with report)` if you want to change default behavior
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;; Allow triald_system to gain file-read access from sandbox extensions
+(with-filter (extension "com.apple.app-sandbox.read")
+  (allow file-read*))
+(with-filter (extension "com.apple.app-sandbox.read-write")
+  (allow file-read* file-write*))
+
+;; Access to appropriate MA locations
+(require-all
+  (require-any
+    (subpath "/System/Library/AssetsV2"))
+  (extension "com.apple.assets.read"))
+
+(allow user-preference-read (preference-domain "com.apple.SoftwareUpdate"))
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; Your preference domain
+(allow user-preference-read user-preference-write
+       (preference-domain "com.apple.triald.system"))
+(allow user-preference-read)
+
+;; Read/write access to a temporary directory.
+(allow file-read* file-write*
+       (subpath (param "TMPDIR"))
+       (subpath (param "DARWIN_CACHE_DIR"))
+       )
+
+;; Read absolute path
+(allow file-read*
+    (subpath "/usr/libexec"))
+
+;; Write absolute path
+(allow file-read* file-write*
+    (subpath "/private/var/tmp/com.apple.triald"))
+
+;; Allow read-write access to /Library/Trial
+(allow file-read* file-write*
+    (subpath "/Library/Trial"))
+
+(allow mach-lookup
+    (global-name "com.apple.apsd"
+                 "com.apple.ckdiscretionaryd"
+                 "com.apple.cloudd.system"                      ;; Needed for CloudKit fetching
+                 "com.apple.duetactivityscheduler"              ;; Allow getting scheduled by BGST
+                 "com.apple.mobileasset.autoasset"
+                 "com.apple.mobileassetd.v2"
+                 "com.apple.biome.access.system"                ;; Ability to access system streams
+                 "com.apple.SystemConfiguration.configd"        ;; APS
+                 "com.apple.windowserver.active"                ;; APS
+                 "com.apple.metadata.mds"                       ;; For excluding the disk cache from backups
+                 "com.apple.lsd.modifydb"                       ;; For writing out TRISystemInfo
+                 "com.apple.lsd.mapdb"                          ;; For writing out TRISystemInfo
+                 "com.apple.coreservices.launchservicesd"       ;; LaunchServices (launchservicesd)
+                 "com.apple.coreservices.quarantine-resolver")) ;; LaunchServices (launchservicesd)
+
+;; Issue sandbox extensions (likely for TrialArchivingService)
+(allow file-issue-extension
+    (require-all
+              (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")
+              (subpath "/Library/Trial")))
+
+;; Allow read-write access to /private/tmp/TrialTestFiles
+(allow file-read* file-write*
+  (subpath "/private/tmp/TrialTestFiles"))
+  
+;; Allow read-write access to /private/var/folders/
+(allow file-read* file-write*
+  (subpath "/private/var/folders/"))
+
+;; Allow getting scheduled by BGST
+(allow mach-lookup
+    (global-name "com.apple.duetactivityscheduler")
+)
+
+;; Diagnostics and Usage Targeting
+(allow file-read*
+    (subpath "/Library/OSAnalytics/Preferences")
+    (subpath "/Library/Application Support/CrashReporter")
+)
+
+;; Read/write access to a temporary directory
+(allow file-read* file-write*
+       (subpath (param "TMPDIR"))
+       (subpath (param "DARWIN_CACHE_DIR"))
+       )
+(allow file-read* file-write*
+    (mount-relative-literal "/.TemporaryItems")                         ;; For NSDataWritingAtomic Foundation writes
+    (mount-relative-regex #"^/\.TemporaryItems/folders.[0-9]+(/|$)"))
+
+;; Decryption key access for encrypted assets
+(allow file-read*
+    (subpath "/System/Library/PrivateFrameworks/TrialServer.framework")
+    (subpath "/AppleInternal/Library/Trial/NamespaceKeys"))
+
+;;; Biome + ANE allowances
+(allow iokit-open-service
+    (iokit-user-client-class "AppleVirtIONeuralEngineDevice")               ;; ANE purge access
+)
+(allow iokit-open
+    (iokit-user-client-class "AppleVirtIONeuralEngineDeviceUserClient")     ;; ANE purge access
+    (iokit-user-client-class "AppleKeyStoreUserClient")                     ;; Biome access
+)
+(allow mach-lookup (global-name "com.apple.appleneuralengine"))
+
+;; PET
+(allow file-read* file-write*
+    (subpath "/Library/Caches/com.apple.proactive.eventtracker"))
+
+;; Support kernel experimentation
+;; These are one-time allow-listed sysctls. Future adopters should add their
+;; sysctl under the kern.trial namespace instead.
+(allow sysctl-write (sysctl-name "kern.testing_experiment_factor"))
+(allow sysctl-write (sysctl-name "kern.sched_preemption_disable_threshold_mt"))
+(allow sysctl-write (sysctl-name "kern.interrupt_masked_threshold_mt"))
+(allow sysctl-write (sysctl-name "kern.timeouts_are_fatal"))
+
+;; Supports kern.trial.* sysctls, like kern.trial.test
+(allow sysctl-write (sysctl-name-prefix "kern.trial."))

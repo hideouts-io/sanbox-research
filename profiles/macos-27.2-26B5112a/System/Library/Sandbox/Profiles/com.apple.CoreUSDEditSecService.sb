@@ -1,0 +1,51 @@
+;;;;;; Sandbox profile for CoreUSDEditSecService XPC service
+;;;;;;
+;;;;;; Copyright (c) 2024 Apple Inc.  All Rights reserved.
+;;;;;;
+;;;;;; WARNING: The sandbox rules in this file currently constitute
+;;;;;; Apple System Private Interface and are subject to change at any time and
+;;;;;; without notice.
+
+(version 1)
+
+(deny default)
+(debug deny)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+
+(corefoundation)
+
+(allow process-info* (target self))
+
+(allow iokit-open-user-client
+    (iokit-user-client-class "IOGPUDeviceUserClient")
+    (iokit-user-client-class "IOSurfaceRootUserClient")
+    (iokit-user-client-class "AGXDeviceUserClient")
+    (iokit-user-client-class "AGPMClient")
+    (iokit-user-client-class "IGAccelDevice")
+    (iokit-user-client-class "IGAccelSharedUserClient")
+    (iokit-user-client-class "IGAccelCommandQueue")
+)
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+(allow process-info-pidinfo)
+
+(allow mach-lookup
+    (global-name "com.apple.windowserver.active")
+    (global-name "com.apple.tccd.system")
+    (global-name "com.apple.CoreServices.coreservicesd")
+    (global-name "com.apple.distributed_notifications@Uv3")
+)
+
+;; Read access to the filesystem
+(allow file-read*)
+
+;; Preferences — allow read for our own domain only
+(allow user-preference-read
+    (preference-domain "com.apple.CoreUSDEditSecService")
+)

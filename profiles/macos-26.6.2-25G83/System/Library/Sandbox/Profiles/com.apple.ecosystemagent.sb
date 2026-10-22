@@ -1,0 +1,72 @@
+;;; Copyright (c) 2017 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;; For validating the entitlements of clients.
+;; (allow process-info-codesignature)
+
+;;  Read CFPreferences in app bundles
+(allow user-preference-read
+    (preference-domain "kCFPreferencesAnyApplication"))
+
+;;  Read from the Ecosystem preference domain
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.ecosystem")
+    (preference-domain "com.apple.ecosystemagent")
+    (preference-domain "com.apple.ecosystemd")
+    (preference-domain "com.apple.ecosystem.policy"))
+
+;; User Notifications
+(allow mach-lookup
+    (global-name "com.apple.usernotifications.listener")
+    (global-name "com.apple.ecosystem.notifications")
+    (global-name "com.apple.ecosystem.daemon.unsupported-apps")  ;; for sending on-disk apps to daemon
+    (global-name "com.apple.lsd.mapdb")                         ;; needed for Checkbox
+    (global-name "com.apple.coreservices.launchservicesd")      ;; needed for Checkbox
+    (global-name "com.apple.coreservices.quarantine-resolver")  ;; needed for LSOpen
+    (global-name "com.apple.finder.ServiceProvider")            ;; needed for Open in Finder
+    (global-name "com.apple.pbs.fetch_services")                ;; needed for Open in Finder
+    (global-name "com.apple.pasteboard.1")                      ;; needed for Open in Finder
+    (global-name "com.apple.iconservices"))                     ;; needed for notification icon badges
+
+;; Allow writing notification icon files to temporary directory
+(allow file-write-create file-write-data file-write-unlink
+    (subpath (param "TMPDIR")))
+
+;; For Opening System Profiler
+(allow lsopen)
+
+;; For revealing apps in Finder (NSWorkspace.selectFile)
+;; Allows reading metadata of any file to reveal it, but not reading contents
+(allow file-read-metadata)
+(allow appleevent-send (appleevent-destination "com.apple.finder"))
+
+;; For reading bundle and codesign info from common bundle types, command line tools and system plugin locations
+;; (needed for extractX86_64OnlyAppInfo to create Bundle and read executableArchitectures)
+(allow file-read*
+    (regex #"\.(app|bundle|colorPicker|driver|prefPane|plugin)$")
+    (regex #"\.(app|bundle|colorPicker|driver|prefPane|plugin)/Contents$")
+    (regex #"\.(app|bundle|colorPicker|driver|prefPane|plugin)/Contents/MacOS/.*")
+    (regex #"\.(app|bundle|colorPicker|driver|prefPane|plugin)/Contents/Info.plist$")
+    (regex #"\.(app|bundle|colorPicker|driver|prefPane|plugin)/Contents/Resources/.*")
+    (subpath "/usr")
+    (subpath "/sbin")
+    (subpath "/bin")
+    (subpath "/Library/Printers/")
+    (subpath "/Library/Audio/Plug-Ins/")
+    (regex #"/Users/.*/Library/Audio/Plug-Ins/.*")
+    (subpath "/Library/Screen Savers/")
+    (subpath "/Library/Security/SecurityAgentPlugins/"))

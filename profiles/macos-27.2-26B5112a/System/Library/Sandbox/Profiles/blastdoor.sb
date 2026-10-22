@@ -1,0 +1,535 @@
+;;; This profile contains the rules necessary to make BlastDoor as close to
+;;; compute-only as possible, while still remaining functional.
+;;;
+;;; For macOS: /System/Library/PrivateFrameworks/MessagesBlastDoorSupport.framework/XPCServices/MessagesBlastDoorService.xpc/MessagesBlastDoorService
+
+(version 3)
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; Basic Rules
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Deny all default rules.
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+
+(import "dyld-support.sb")
+
+(allow system-mac-syscall (with telemetry) (with report))
+(with-filter (mac-policy-name "Sandbox")
+    (allow system-mac-syscall
+        (mac-syscall-number
+            4     ; SYSCALL_CONTAINER
+            6     ; SYSCALL_EXTENSION_CONSUME
+            7     ; SYSCALL_EXTENSION_RELEASE
+            65))) ; SYSCALL_ENABLE_STATE_FLAG
+
+(allow file-test-existence)
+
+;; Rules copied from system.sb. Ones that we've deemed overly permissive
+;; or unnecessary for BlastDoor have been removed.
+
+;; Allow read access to standard system paths.
+(allow file-read*
+       (require-all (file-mode #o0004)
+                    (require-any (subpath "/System")
+                                 (subpath "/usr/lib")
+                                 (subpath "/usr/share")
+                                 (subpath "/private/var/db/dyld"))))
+
+;; Allow loading dylibs from system locations.
+(allow file-map-executable
+       (subpath "/System/Library")
+       (subpath "/usr/lib"))
+
+(allow file-test-existence (subpath "/System"))
+
+(allow file-read-metadata
+       (literal "/etc")
+       (literal "/tmp")
+       (literal "/var")
+       (literal "/private/etc/localtime"))
+
+;; Allow access to standard special files.
+(allow file-read*
+       (literal "/dev/random")
+       (literal "/dev/urandom"))
+
+(allow file-read* file-write-data
+       (literal "/dev/null")
+       (literal "/dev/zero"))
+
+(with-filter (system-attribute apple-internal)
+    (allow file-read* file-write-data file-ioctl
+        (literal "/dev/dtracehelper")))
+
+;; TODO: Don't allow core dumps to be written out unless this is on a dev
+;; fused device?
+(allow file-write*
+       (require-all (regex #"^/cores/")
+                    (require-not (file-mode 0))))
+
+;; Only allow streaming logs on internal installs.
+(with-filter (system-attribute apple-internal)
+             (allow mach-lookup (global-name "com.apple.diagnosticd")))
+
+;; Allow mostly harmless operations.
+(allow signal process-info-dirtycontrol process-info-pidinfo
+       (target self))
+
+(deny (with telemetry) sysctl-read)
+(allow sysctl-read
+       (sysctl-name "hw.activecpu"
+                    "hw.cachelinesize"
+                    "hw.cpufamily"
+                    "hw.l2cachesize"
+                    "hw.logicalcpu_max"
+                    "hw.logicalcpu"
+                    "hw.machine"
+                    "hw.memsize"
+                    "hw.model"
+                    "hw.ncpu"
+                    "hw.nperflevels"
+                    "hw.optional.arm.caps"
+                    "hw.optional.neon_fp16"
+                    "hw.osenvironment"
+                    "hw.pagesize_compat"
+                    "hw.physicalcpu_max"
+                    "hw.physicalcpu"
+                    "hw.product"
+                    "hw.target"
+                    "hw.vectorunit"
+                    "kern.hv_vmm_present"
+                    "kern.maxfilesperproc"
+                    "kern.osproductversion"
+                    "kern.osvariant_status"
+                    "kern.osversion"
+                    "kern.secure_kernel"
+                    "machdep.ptrauth_enabled"
+                    "security.mac.lockdown_mode_state"
+                    "sysctl.name2oid"
+                    "vm.malloc_ranges")
+       (sysctl-name-prefix "hw.perflevel"))
+
+;; We don't need to post any darwin notifications.
+(deny darwin-notification-post)
+
+;; We shouldn't allow any other file operations not covered under
+;; the default of deny above.
+(deny file-clone file-link)
+
+;; Don't deny file-test-existence: <rdar://problem/59611011>
+;; (deny file-test-existence)
+
+(deny mach-cross-domain-lookup)
+
+;; Don't allow BlastDoor to spawn any other XPC services other than
+;; ones that we can intentionally allowlist later.
+(deny mach-lookup (xpc-service-name-regex #".*"))
+
+;; Don't allow any commands on sockets.
+(deny socket-ioctl)
+
+;; Denying this should have no ill effects for our use case.
+(deny system-privilege)
+
+(deny syscall-mach (with telemetry) (with message "blastdoor syscall-mach"))
+(allow syscall-mach
+    (machtrap-number
+        MSC__kernelrpc_mach_port_allocate_trap
+        MSC__kernelrpc_mach_port_construct_trap
+        MSC__kernelrpc_mach_port_deallocate_trap
+        MSC__kernelrpc_mach_port_destruct_trap
+        MSC__kernelrpc_mach_port_guard_trap
+        MSC__kernelrpc_mach_port_insert_member_trap
+        MSC__kernelrpc_mach_port_insert_right_trap
+        MSC__kernelrpc_mach_port_mod_refs_trap
+        MSC__kernelrpc_mach_port_request_notification_trap
+        MSC__kernelrpc_mach_port_type_trap
+        MSC__kernelrpc_mach_vm_allocate_trap
+        MSC__kernelrpc_mach_vm_deallocate_trap
+        MSC__kernelrpc_mach_vm_map_trap
+        MSC__kernelrpc_mach_vm_protect_trap
+        MSC__kernelrpc_mach_vm_purgable_control_trap
+        MSC_host_self_trap
+        MSC_mach_generate_activity_id
+        MSC_mach_msg2_trap
+        MSC_mk_timer_create
+        MSC_mk_timer_destroy
+        MSC_semaphore_signal_trap
+        MSC_semaphore_timedwait_trap
+        MSC_semaphore_wait_trap
+        MSC_syscall_thread_switch
+        MSC_thread_get_special_reply_port))
+
+(deny syscall-mig (with telemetry) (with message "blastdoor syscall-mig"))
+(allow syscall-mig
+    (kernel-mig-routine
+        _mach_make_memory_entry
+        clock_get_time
+        host_get_io_master
+        host_info
+        io_connect_method
+        io_connect_method_var_output
+        io_iterator_is_valid
+        io_iterator_next
+        io_object_conforms_to
+        io_registry_entry_create_iterator
+        io_registry_entry_from_path
+        io_registry_entry_get_name_in_plane
+        io_registry_entry_get_parent_iterator
+        io_registry_entry_get_properties_bin_buf
+        io_registry_entry_get_property_bin_buf
+        io_registry_entry_get_registry_entry_id
+        io_registry_get_root_entry
+        io_server_version
+        io_service_add_interest_notification_64
+        io_service_add_notification_bin_64
+        io_service_close
+        io_service_get_matching_service_bin
+        io_service_get_matching_services_bin
+        io_service_open_extended
+        mach_port_get_context_from_user
+        mach_port_get_refs
+        mach_port_is_connection_for_service
+        mach_port_request_notification
+        mach_port_set_attributes
+        mach_vm_copy
+        mach_vm_map_external
+        mach_vm_remap_external
+        semaphore_create
+        semaphore_destroy
+        task_get_special_port_from_user
+        task_info_from_user
+        task_restartable_ranges_synchronize
+        thread_info
+        thread_policy_set))
+
+(deny syscall-unix (with telemetry) (with message "blastdoor syscall-unix"))
+(allow syscall-unix
+    (syscall-number
+        SYS___disable_threadsignal
+        SYS___semwait_signal_nocancel
+        SYS___pthread_sigmask
+        SYS_access
+        SYS_bsdthread_create
+        SYS_bsdthread_ctl
+        SYS_bsdthread_terminate
+        SYS_connect
+        SYS_dup
+        SYS_faccessat
+        SYS_fgetxattr
+        SYS_flistxattr
+        SYS_fsetattrlist
+        SYS_fsgetpath
+        SYS_fstat64
+        SYS_fstat64_extended
+        SYS_fstatat64
+        SYS_fstatfs64
+        SYS_getattrlist
+        SYS_getattrlistbulk
+        SYS_getdirentries64
+        SYS_getentropy
+        SYS_geteuid
+        SYS_getfsstat64
+        SYS_getgid
+        SYS_gethostuuid
+        SYS_getrlimit
+        SYS_gettimeofday
+        SYS_getuid
+        SYS_getxattr
+        SYS_issetugid
+        SYS_kdebug_trace_string
+        SYS_kdebug_trace64
+        SYS_kdebug_typefilter
+        SYS_kevent_id
+        SYS_kevent_qos
+        SYS_lseek
+        SYS_lstat64
+        SYS_lstat64_extended
+        SYS_madvise
+        SYS_mkdir
+        SYS_mkdirat
+        SYS_mmap
+        SYS_mprotect
+        SYS_munmap
+        SYS_os_fault_with_payload
+        SYS_pathconf
+        SYS_pread
+        SYS_pread_nocancel
+        SYS_psynch_cvbroad
+        SYS_psynch_cvclrprepost
+        SYS_psynch_cvsignal
+        SYS_psynch_cvwait
+        SYS_psynch_rw_rdlock
+        SYS_psynch_rw_unlock
+        SYS_psynch_rw_wrlock
+        SYS_psynch_mutexdrop
+        SYS_psynch_mutexwait
+        SYS_read
+        SYS_read_nocancel
+        SYS_readlink
+        SYS_rename
+        SYS_rmdir
+        SYS_shared_region_check_np
+        SYS_shared_region_map_and_slide_2_np
+        SYS_sigsuspend_nocancel
+        SYS_socket
+        SYS_stat64
+        SYS_stat64_extended
+        SYS_statfs64
+        SYS_thread_selfid
+        SYS_ulock_wait
+        SYS_ulock_wait2
+        SYS_ulock_wake
+        SYS_umask
+        SYS_workq_kernreturn))
+
+(deny syscall-unix (with send-signal SIGKILL)
+    (syscall-number
+        SYS_terminate_with_payload))
+
+;; Syscall subcommand filtering - fcntl
+(deny system-fcntl)
+(allow system-fcntl
+       (fcntl-command F_ADDFILESIGS_RETURN
+                      F_CHECK_LV
+                      F_GETFD
+                      F_GETPATH
+                      F_GETPROTECTIONCLASS
+                      F_GETSIGSINFO
+                      F_NOCACHE
+                      F_SETFD
+                      F_SPECULATIVE_READ
+                      F_SETPROTECTIONCLASS
+                      F_SINGLE_WRITER
+                      F_PREALLOCATE))
+
+
+;; Syscall subcommand filtering - fsctl
+(deny system-fsctl)
+(allow system-fsctl
+       (fsctl-command FSIOC_CAS_BSDFLAGS))
+
+
+;; For validating the entitlements of clients. This is so only entitled
+;; clients can pass data into a BlastDoor instance.
+;; csops/csops_audittoken filtering
+(if (defined? 'process-codesigning*)
+    (begin
+        (allow process-codesigning-entitlements-blob-get)
+        (allow process-codesigning-status-get)
+        (deny process-codesigning-blob-get
+              process-codesigning-cdhash-get
+              process-codesigning-identity-get
+              process-codesigning-status-set
+              process-codesigning-text-offset-get
+              process-codesigning-teamid-get)
+        (deny process-info-codesignature (with no-report)))
+    (allow process-info-codesignature))
+
+;; ioctl filtering
+(deny file-ioctl)
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; Reading Files
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Support for BlastDoor receiving sandbox extensions from clients to read files from a target location.
+(allow file-read*
+       (extension "com.apple.app-sandbox.read"))
+
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; Writing Files
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Support for BlastDoor receiving sandbox extensions from clients to write files to a target location.
+
+(allow file-read* file-write* file-clone
+    (require-any
+        (extension "com.apple.app-sandbox.read-write")
+        (extension "com.apple.blastdoor.read-write")))
+
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; The items below were copied from iOS's built-in "blastdoor-messages.sb"
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; The root cause of this violation is
+;; rdar://20117923 (setting the dirty bit on self calls out to 4 mac policy hooks, should be 0)
+;; rdar://72366475 The xnu team to optimize the attempt to check this for self PID
+(deny system-privilege (privilege-id PRIV_GLOBAL_PROC_INFO) (with no-report))
+
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; Mach bootstrap
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+(allow mach-bootstrap
+    (apply-message-filter
+        (with-filter (require-not (state-flag "blastdoor-block-boostrap"))
+            (deny mach-message-send (with message "Mach bootstrap pre launch"))
+            (allow mach-message-send (message-number 718 800 803 805)))
+        (with-filter (state-flag "blastdoor-block-boostrap")
+            (deny mach-message-send (with message "Mach bootstrap post launch")))))
+
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; IOKIT: All I/O Kit rules
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; iokit-get-properties: To get properties on an I/O Kit device
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Don't allow access to any I/O Kit properties
+(deny iokit-get-properties)
+
+;; Below is the list of exceptions to allow iokit-get-properties filtered for each
+;; iokit-registry-entry-class.
+;;
+;; Tips:
+;; 1. When adding new iokit-property into the allow list, use `ioreg -w0 -l -i` and
+;; `ioreg -w0 -l -i -p IODeviceTree` to audit, for the device with the appropriate hardware.
+;; Clownfish/Stash search can also reveal this hierarchy for most cases.
+;; Whenever applicable, use a common ancestor class to filter the rules.
+;;
+;; 2. The list of iokit-property in some blocks may contain properties looked up by APIs
+;; (e.g., CoreMedia) that do not exist in the class inheritence tree.
+;; Audit those case-by-case. It is useful to keep those segregated for maintenance.
+;;
+;; 3. Keep the list of blocks, and their respective iokit-properties sorted.
+
+(with-filter (iokit-registry-entry-class "AGXFamilyAccelerator")
+    (allow iokit-get-properties
+        (iokit-property "MetalPluginClassName"
+                        "MetalPluginName"
+                        ;; Nonexistent properties
+                        "AAPL,slot-name"
+                        "IOAVDHEVCDecodeCapabilities"
+                        "IOGVAHEVCDecode"
+                        "SafeEjectRequested")))
+
+(with-filter (iokit-registry-entry-class "AppleAVD")
+    (allow iokit-get-properties
+        (iokit-property "IOAVDHEVCDecodeCapabilities"
+                        ;; Nonexistent properties
+                        "AppleJPEGNumCores"
+                        "IOGVAHEVCDecode")))
+
+(with-filter (iokit-registry-entry-class "AppleDiskImageDevice")
+    (allow iokit-get-properties
+        (iokit-property "DiskImageURL")))
+
+(with-filter (iokit-registry-entry-class "AppleJPEGDriver")
+    (allow iokit-get-properties
+        (iokit-property "AppleJPEGNumCores"
+                        "AppleJPEGSupportsAppleInterchangeFormats"
+                        ;; Nonexistent properties
+                        "IOAVDHEVCDecodeCapabilities"
+                        "IOGVAHEVCDecode")))
+
+(with-filter (iokit-registry-entry-class "AppleM2ScalerCSCDriver")
+    (allow iokit-get-properties
+        (iokit-property "IOSurfaceAcceleratorCapabilitiesDict")))
+
+(with-filter (iokit-registry-entry-class "IOBlockStorageDevice"
+                                         "IOStorage")
+    (allow iokit-get-properties
+        (iokit-property "IOMediaIcon"
+                        "Protocol Characteristics")))
+
+(with-filter (iokit-registry-entry-class "IOBufferCopyEngine")
+    (allow iokit-get-properties
+        (iokit-property ;; Nonexistent properties
+                        "AppleJPEGNumCores"
+                        "IOAVDHEVCDecodeCapabilities"
+                        "IOGVACodec"
+                        "IOGVAHEVCDecode")))
+
+(with-filter (iokit-registry-entry-class "IOGraphicsAccelerator2")
+    (allow iokit-get-properties
+        (iokit-property "IODVDBundleName"
+                        "IOGVACodec"
+                        "IOGVAHEVCDecode"
+                        "IOVARendererID"
+                        "MetalPluginClassName"
+                        "MetalPluginName"
+                        ;; Nonexistent properties
+                        "AAPL,slot-name"
+                        "IOAVDHEVCDecodeCapabilities"
+                        "IOPCIExpressLinkStatus"
+                        "SafeEjectRequested")))
+
+(with-filter (iokit-registry-entry-class "IOHDIXHDDrive")
+    (allow iokit-get-properties
+        (iokit-property "image-path")))
+        
+(with-filter (iokit-registry-entry-class "IOMedia")
+    (allow iokit-get-properties
+        (iokit-property "Ejectable")
+        (iokit-property "Removable")))
+
+(with-filter (iokit-registry-entry-class "IOPCIDevice")
+    (allow iokit-get-properties
+        (iokit-property "AAPL,slot-name"
+                        "ATY,DeviceName"
+                        "ATY,FamilyName"
+                        "IOPCIExpressLinkStatus"
+                        "Thunderbolt Path"
+                        "built-in")))
+
+(with-filter (iokit-registry-entry-class "IOPlatformDevice")
+    (allow iokit-get-properties
+        (iokit-property "soc-generation")))
+
+(with-filter (iokit-registry-entry-class "IOSCSIProtocolInterface")
+    (allow iokit-get-properties
+        (iokit-property "Product Identification"
+                        "IOMediaIcon")))
+
+(with-filter (iokit-registry-entry-class "IOThunderboltPort")
+    (allow iokit-get-properties
+        (iokit-property "Socket ID"
+                        "Supported Link Speed"
+                        "Supported Link Width")))
+
+;; board-id is present on multiple nodes:
+;; 1. [IODeviceTree:/] IOPlatformExpertDevice
+;; 2. [IODeviceTree:/platform] IOService
+(allow iokit-get-properties
+    (iokit-property "board-id"))
+
+(allow iokit-get-properties
+    (iokit-property "IOClassNameOverride"))
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; iokit-open: access to I/O Kit device via IOServiceOpen
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Don't allow access to any I/O Kit device
+;; Note: "iokit-open" is obsolete
+(deny iokit-open-user-client)
+
+;; Allow analytics in public builds (Privacy-gated to seeds) 
+;; rdar://118461704 (Create telemetry for dlsym usage in MBDS)
+;; rdar://134362456 (Allow public analytics in BlastDoor sandbox)
+(when (equal? (param "RC_SEED_BUILD") "1")
+    (allow mach-lookup (global-name "com.apple.analyticsd"))
+    (allow syscall-unix (syscall-number SYS_csrctl)))
+(with-filter (system-attribute apple-internal)
+    (allow mach-lookup (global-name "com.apple.analyticsd"))
+    (allow syscall-unix (syscall-number SYS_csrctl)))
+
+;;; -------------------------------------------------------------------------------------------- ;;;
+;;; Wallet
+;;; -------------------------------------------------------------------------------------------- ;;;
+
+;; Allow realpath(3), see rdar://70055108&123398800
+(allow file-read-metadata)
+
+;; Allow retrieving the user's preferred languages.
+(allow file-read*
+    (literal "/Library/Preferences/.GlobalPreferences.plist"))

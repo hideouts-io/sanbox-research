@@ -1,0 +1,78 @@
+;;; Copyright (c) 2025 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;;; Allow own process info
+(allow process-info* (target self))
+
+;;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;;; Fork and exec mddiagnose(8)
+(allow process-fork)
+(with-filter
+    (require-any
+        (literal "/usr/bin/mddiagnose"))
+    (allow process-exec (with no-sandbox)))
+
+;;; NSBundle tries these but they are unnecessary
+(deny (with no-report) file-read*
+    (literal "/usr/bin")
+    (literal "/usr/bin/searchdiagnose"))
+
+;;; Read/write access to suffixed darwin directories
+(allow file-read* file-write*
+    (subpath (param "_DARWIN_USER_TEMP")))
+
+;;; This tool can contribute to a sysdiagnose
+(allow file-read* file-write*
+    (prefix "/private/var/tmp/IN_PROGRESS_sysdiagnose_"))
+
+;;;
+;;; Mach Services
+;;;
+
+(allow mach-lookup
+    (global-name "com.apple.SystemConfiguration.configd")
+    (global-name "com.apple.spotlight.SearchAgent")
+    (global-name "com.apple.spotlight.IndexAgent")
+    (global-name "com.apple.metadata.mds"))
+
+;;;
+;;; User Files
+;;;
+
+(define (user-subpath p)
+    (subpath (string-append (param "REAL_USER_HOME") p)))
+
+(define (user-prefix p)
+    (prefix (string-append (param "REAL_USER_HOME") p)))
+
+(define (user-literal p)
+    (literal (string-append (param "REAL_USER_HOME") p)))
+
+;;; User files readable by this tool
+(allow file-read*
+    (user-subpath "/Library/Spotlight")
+    (user-subpath "/Library/Metadata/CoreSpotlight"))
+
+;;;
+;;; User Preferences
+;;;
+
+(allow user-preference-read
+       (preference-domain "kCFPreferencesAnyApplication")
+       (preference-domain "com.apple.Spotlight"))

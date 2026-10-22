@@ -1,0 +1,36 @@
+;;; Copyright (c) 2024 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+(deny default)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+(allow file-read-metadata
+    (literal "/")
+    (literal "/Users")
+    (regex (string-append "^" (regex-quote (param "_HOME"))))
+)
+
+;; Your preference domain
+(allow user-preference-read user-preference-write
+    (preference-domain "kCFPreferencesAnyApplication")
+    (preference-domain "com.apple.SensingPredict")
+)
