@@ -1,0 +1,63 @@
+;; `ToolMetadataService` on macOS
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+(deny mach-priv-host-port)
+
+;;  If you're importing anything here, make sure to include it in WFSandboxParametersHash
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;;; Homedir-relative path filters
+(define (home-literal relative)
+    (literal (string-append (param "HOME") relative)))
+(define (home-prefix relative)
+    (prefix (string-append (param "HOME") relative)))
+(define (home-subpath relative)
+    (subpath (string-append (param "HOME") relative)))
+
+;; -- Policy --
+
+;; Preference domains
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.toolmetadataservice"))
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; Allow reading and read-extending files we have a read sandbox extension for
+(with-filter (extension "com.apple.app-sandbox.read")
+    (allow file-read*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read")))
+;; Allow rw and rw-extending files we have a rw sandbox extension for
+(with-filter (extension "com.apple.app-sandbox.read-write")
+    (allow file-read* file-write*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")))
+
+;; Temp and cache directories
+(allow file-read* file-write*
+    (subpath (param "DARWIN_CACHE_DIR"))
+    (subpath (param "TMPDIR")))
+
+;; Read/write access to ToolKit database
+(allow file-read* file-write*
+    (home-subpath "/Library/Shortcuts/ToolKit"))
+
+; Keep case-sensitive alphabetically sorted
+(allow mach-lookup
+    (global-name "com.apple.linkd.registry"
+                 "com.apple.lsd.mapdb"))
+

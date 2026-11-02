@@ -1,0 +1,89 @@
+(version 1)
+(deny default)
+(import "bsd.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+(allow file-read* file-write*
+       (literal "/Library/Preferences/com.apple.AssetCache.plist")
+       (regex #"^(/private)?/var/folders/[^/]+/[^/]+/C($|/)")
+       (regex #"^(/private)?/var/folders/[^/]+/[^/]+/T($|/)")
+       (regex #"/Library/Application Support/Apple/AssetCache$")
+       (regex #"/Library/Application Support/Apple/AssetCache/Data$")
+       (literal "/Library/Application Support/Apple/AssetCache/.activated"))
+(allow file-write-create
+       (regex #"/Library$")
+       (regex #"/Library/Application Support$")
+       (regex #"/Library/Application Support/Apple$"))
+
+;; The settings and the saved DDM configuration live in a protected system container
+;; (AssetCacheConfiguration), not in a plist anyone can write. Reaching it needs two things:
+;;
+;;   * the mach-lookups container_query_create() documents, to talk to containermanagerd at all;
+;;   * file access through the sandbox extension containermanagerd issues for the container.
+;;     CONTAINER_CLASS_PROTECTED_SYSTEM_DATA issues the "com.apple.app-sandbox.read-write"
+;;     extension class (see Container.Class.protectedSystem.plist), which is a different class
+;;     from the "com.apple.sandbox.container" one app data containers use -- naming the wrong
+;;     class here fails the open(2) even though the query itself succeeded.
+;;
+;; There is deliberately no literal rule for the container path: it is a UUID assigned by
+;; containermanagerd, so there is nothing to write down, and the extension is the only way in.
+(allow mach-lookup
+       (global-name "com.apple.containermanagerd")
+       (global-name "com.apple.containermanagerd.system"))
+(allow file-read* file-write*
+       (extension "com.apple.app-sandbox.read-write"))
+
+;; DataPath secure-create (ACSDataPathValidator secureCreateDirectoryAtPath:).
+;;
+;; The TOCTOU-safe create descends from "/" one component at a time using
+;; openat(O_RDONLY | O_DIRECTORY | O_NOFOLLOW), so it needs file-read-data on
+;; EVERY ancestor of the cache directory — not just on the leaf. bsd.sb grants
+;; file-read-metadata globally (enough for the validator's realpath/lstat) but
+;; file-read-data only for a few system paths, so without these rules the walk
+;; fails with EPERM, surfacing as ACSDataPathValidatorErrorOpenFailed.
+;;
+;; The rules are deliberately split by directory depth so that traversal does
+;; not imply write access:
+;;
+;;   * "/Volumes" and "/Volumes/<name>" get read-only traversal. The daemon
+;;     must be able to open them to descend, but must not be able to write
+;;     anywhere else on a mounted volume.
+;;   * The per-volume "Library/Application Support" chain gets create rights,
+;;     mirroring what the default location already has above, plus
+;;     file-write-mode/file-write-owner: secureCreateDirectoryAtPath: fchmod()s
+;;     every component it creates (so the process umask cannot weaken the mode)
+;;     and fchown()s the leaf and its immediate parent. Those are sandbox
+;;     operations distinct from file-write-create — granting create alone lets
+;;     the mkdirat(2) succeed and then fails the fchmod with EPERM
+;;     (ACSDataPathValidatorErrorChmodFailed).
+;;   * Only the AssetCache directory and its Data leaf get read/write.
+;;
+;; The intermediate "/Library" chain is listed for read here for the same
+;; traversal reason: the rules above grant it file-write-create but never
+;; file-read-data, so a first-run machine (where those directories are being
+;; created rather than opened) would otherwise fail the same way on the
+;; DEFAULT DataPath. It gets the same mode/owner rights for the same reason.
+(allow file-read-data
+       (literal "/")
+       (regex #"^/Library$")
+       (regex #"^/Library/Application Support$")
+       (regex #"^/Library/Application Support/Apple$")
+       (literal "/Volumes")
+       (regex #"^/Volumes/[^/]+$")
+       (regex #"^/Volumes/[^/]+/Library$")
+       (regex #"^/Volumes/[^/]+/Library/Application Support$")
+       (regex #"^/Volumes/[^/]+/Library/Application Support/Apple$"))
+(allow file-write-create file-write-mode file-write-owner
+       (regex #"^/Library$")
+       (regex #"^/Library/Application Support$")
+       (regex #"^/Library/Application Support/Apple$")
+       (regex #"^/Volumes/[^/]+/Library$")
+       (regex #"^/Volumes/[^/]+/Library/Application Support$")
+       (regex #"^/Volumes/[^/]+/Library/Application Support/Apple$"))
+(allow file-read* file-write*
+       (regex #"^/Volumes/[^/]+/Library/Application Support/Apple/AssetCache$")
+       (regex #"^/Volumes/[^/]+/Library/Application Support/Apple/AssetCache/Data($|/)"))
+
+(allow user-preference-read)
+(allow mach-lookup
+       (global-name "com.apple.AssetCache.builtin"))

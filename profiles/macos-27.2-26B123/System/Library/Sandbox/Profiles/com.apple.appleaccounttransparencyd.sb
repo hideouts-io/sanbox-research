@@ -1,0 +1,130 @@
+;;; Copyright (c) 2026 Apple Inc.  All Rights reserved.
+;;;
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+
+(version 1)
+
+;;;; Tracing mode: log violations without enforcing.
+;;;; To exercise the daemon, run:
+;;;;   sbutil log show | grep appleaccounttransparencyd
+;;;; then add required allow rules and switch these 3 lines to (deny ...) when done.
+(allow (with report) default)
+(allow (with report) file-map-executable iokit-get-properties process-info* nvram*)
+(allow (with report) dynamic-code-generation)
+
+(import "system.sb")
+(system-network)
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;;; Homedir-relative path filters
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath))
+)
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal))
+)
+
+(allow process-info* (target self))
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;;;;
+;;;; Security.framework
+;;;;
+
+(allow ipc-posix-shm-read-data ipc-posix-shm-write-create ipc-posix-shm-write-data
+    (ipc-posix-name "com.apple.AppleDatabaseChanged")
+)
+
+(allow file-read* file-write*
+    (subpath "/private/var/db/mds/system")
+)
+
+(allow file-read*
+    (subpath (param "SECURITY_MESSAGES_DIR"))
+)
+
+;;;;
+;;;; Preferences
+;;;;
+
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.appleaccounttransparencyd")
+)
+
+(allow user-preference-read
+    (preference-domain "com.apple.security")
+    (preference-domain "kCFPreferencesAnyApplication")
+)
+
+;;;;
+;;;; Filesystem
+;;;;
+
+(allow file-read* file-write*
+    (literal "/Library/Preferences/com.apple.security.plist")
+    (home-subpath "/Library/Keychains")
+    (subpath (param "DARWIN_CACHE_DIR"))
+    (subpath (param "DARWIN_USER_DIR"))
+    (subpath (param "TMPDIR"))
+)
+
+;;;;
+;;;; Container Manager Support
+;;;;
+
+;; Allow container manager sandbox extensions for daemon containers
+(allow file-read* file-write*
+    (extension "com.apple.sandbox.container"))
+
+;;;;
+;;;; Mach services
+;;;;
+
+(allow mach-lookup
+    (global-name "com.apple.ak.auth.xpc")
+    (global-name "com.apple.ak.anisette.xpc")
+    (global-name "com.apple.accountsd.accountmanager")
+    ;; For contacting apsd to establish an APS connection.
+    (global-name "com.apple.apsd")
+    (global-name "com.apple.containermanagerd")
+    (global-name "com.apple.metadata.mds")
+    (global-name "com.apple.securityd.xpc")
+    (global-name "com.apple.securityd")
+    (global-name "com.apple.SecurityServer")
+    (global-name "com.apple.SystemConfiguration.configd")
+    (global-name "com.apple.usymptomsd")
+)
+
+;; For this daemon to register its own APS delegate port; apsd looks it up to connect.
+(allow mach-register
+    (global-name "com.apple.appleaccounttransparencyd.aps")
+)
+
+;;;;
+;;;; IOKit
+;;;;
+
+(allow iokit-open
+    (iokit-user-client-class "RootDomainUserClient")
+    ;; Allow access to the key store
+    (iokit-user-client-class "AppleKeyStoreUserClient")
+)
+
+;;;;
+;;;; Network
+;;;;
+
+(allow network-outbound)
+(allow network-outbound
+    ;; to resolve host names
+    (literal "/private/var/run/mDNSResponder")
+)

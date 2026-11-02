@@ -1,0 +1,90 @@
+;;; Copyright (c) 2025 Apple Inc.  All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+(allow process-info* (target self))
+(allow process-info-pidinfo) ;; to display client name in logs
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+
+;; Own preference domain
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.intelligencetasksd"))
+
+;; Read for NSBundle
+(allow file-read*
+    (literal "/System/Library/PrivateFrameworks/IntelligenceTasksEngine.framework/Support")
+    (literal "/System/Library/PrivateFrameworks/IntelligenceTasksEngine.framework/Support/intelligencetasksd"))
+
+;; Read/write access to suffixed darwin directories
+(allow file-read* file-write*
+    (subpath (param "DARWIN_USER_DIR"))
+    (subpath (param "DARWIN_USER_TMP_DIR"))
+    (subpath (param "DARWIN_USER_CACHE_DIR")))
+
+;; Read/write ~/Library/Biome and ~/Library/IntelligencePlatform
+(allow file-read* file-write*
+    (home-subpath "/Library/Biome")
+    (home-subpath "/Library/IntelligencePlatform"))
+
+(allow mach-lookup
+    ;; Service lookup
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.lsd.modifydb")
+    (global-name "com.apple.metadata.mds")
+    
+    ;; Allow connections to user access service
+    (global-name "com.apple.biome.access.user")
+
+    ;; Allow connections to system access service
+    (global-name "com.apple.biome.access.system")
+
+    ;; Reached from the stream write path when reporting pruned events to the
+    ;; view engine; the user-domain variant is used for user-domain streams.
+    (global-name "com.apple.biome.compute.source")
+    (global-name "com.apple.biome.compute.source.user")
+
+    ;; Allow connections to Cascade Diff Update service
+    (global-name "com.apple.SetStoreUpdateService")
+    
+    ;; BackgroundSystemTasks (for telemetry)
+    (global-name "com.apple.duetactivityscheduler")
+
+    ;; To exclude files from backup
+    (global-name "com.apple.backupd.sandbox.xpc")
+)
+
+;; AppleKeyStore
+(allow iokit-open
+    (iokit-user-client-class "AppleKeyStoreUserClient")
+)

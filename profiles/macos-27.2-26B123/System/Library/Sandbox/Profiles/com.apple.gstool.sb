@@ -1,0 +1,112 @@
+
+;;; Copyright (c) 2021 Apple Inc. All Rights reserved.
+(version 1)
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+(deny mach-priv-host-port)
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "_HOME")) home-relative-regex)))
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "_HOME") home-relative-subpath)))
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "_HOME") home-relative-prefix)))
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "_HOME") home-relative-literal)))
+(allow process-info* (target self))
+(allow process-info-dirtycontrol (target self))
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+;; Allow-list for mach-lookup
+(allow mach-lookup
+    (global-name "com.apple.biome.access.user")
+    (global-name "com.apple.biome.access.system")
+    (global-name "com.apple.biome.compute.source.user")
+    (global-name "com.apple.UNCUserNotification")
+    (global-name "com.apple.generativesearch.server.search")
+    (global-name "com.apple.generativesearch.server.indexing")
+    (global-name "com.apple.generativelearning.server.summaries")
+    (global-name "com.apple.generativelearning.server.insights")
+    (global-name "com.apple.modelmanager")
+    (global-name "com.apple.tccd")
+    (global-name "com.apple.tccd.system")
+    (global-name "com.apple.generativelearning")
+)
+(allow file-read*
+    (subpath (param "_DARWIN_USER_TEMP"))
+    (subpath "/Users/local/Library/Preferences")
+    (subpath "/Users/local")
+    (home-subpath "/Library/SearchManager")
+)
+(allow file-write*
+    (subpath (param "_DARWIN_USER_TEMP"))
+    (home-subpath "/Library/SearchManager")
+)
+;; Consume sandbox extensions
+(with-filter (extension "com.apple.app-sandbox.read")
+    (allow file-read*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read")))
+(with-filter (extension "com.apple.app-sandbox.read-write")
+    (allow file-read* file-write*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")))
+;;; Fork and exec gstool setup commands
+(allow process-fork)
+(with-filter
+    (require-any
+        (literal "/usr/local/bin/ffctl")
+        (literal "/usr/local/bin/jetsam_properties")
+        (literal "/usr/local/bin/skutil"))
+    (allow process-exec (with no-sandbox)))
+(allow iokit-open
+    (iokit-user-client-class "AppleKeyStoreUserClient"))
+(allow user-preference-read
+    (preference-domain "kcfpreferencesanyapplication")
+)
+(allow user-preference-read user-preference-write
+    (preference-domain "com.apple.generativesearch")
+)
+;; Container manager
+(allow file-read* file-write*
+    (extension "com.apple.sandbox.container")
+)
+(allow mach-lookup
+    (global-name "com.apple.containermanagerd")
+)
+;;; Query Parser additional access start
+;; CDM / IntelligencePlatform / MediaAnalysis / Asset delivery for on-device Query Parser
+(allow mach-lookup
+    (global-name "com.apple.assistant.cdm")
+    (global-name "com.apple.intelligenceplatform.View")
+    (global-name "com.apple.intelligenceplatform.EntityResolution")
+    (global-name "com.apple.mediaanalysisd.analysis")
+    (global-name "com.apple.mediaanalysisd.service.public")
+    (global-name "com.apple.modelcatalog.catalog")
+    (global-name "com.apple.mobileasset.autoasset")
+    (global-name "com.apple.mobileassetd.v2")
+    (global-name "com.apple.siri.uaf.service")
+    (global-name "com.apple.siri.uaf.subscription.service")
+    (global-name "com.apple.triald.namespace-management")
+)
+;; Trial / MobileAsset / UAF asset payload paths used by Query Parser
+(allow file-read*
+    (subpath "/private/var/mobile/Library/Trial")
+    (subpath "/private/var/MobileAsset")
+    (subpath "/System/Library/AssetsV2")
+    (subpath "/AppleInternal/Library/Assistant")
+    (subpath "/AppleInternal/Spotlight/Assets")
+)
+;; Preferences read by QP / Assistant / Spotlight stack
+(allow user-preference-read
+    (preference-domain "com.apple.spotlight")
+    (preference-domain "com.apple.spotlightresources.defaults")
+    (preference-domain "com.apple.assistant.backedup")
+    (preference-domain "com.apple.assistant.support")
+    (preference-domain "com.apple.generativefunctions.generativefunctionsinstrumentation")
+)
+;;; Query Parser additional access end

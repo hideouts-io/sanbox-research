@@ -1,0 +1,45 @@
+;;;;;; Copyright (c) 2024 Apple Inc.  All Rights reserved.
+;;;;;;
+;;;;;; WARNING: The sandbox rules in this file currently constitute
+;;;;;; Apple System Private Interface and are subject to change at any time and
+;;;;;; without notice. The contents of this file are also auto-generated and
+;;;;;; not user editable; it may be overwritten at any time.
+
+(version 1)
+(deny default)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+
+;; initialize CF sandbox actions
+(corefoundation)
+
+;; for resolving symlinks, realpath(3), and equivalents
+(allow file-read-metadata)
+
+;; for sandbox_init_with_parameters()
+(allow mach-priv-host-port)
+
+;; allow reading notification bundle and framework
+(allow file-read*
+	(subpath "System/Library/UserNotifications/Bundles/com.apple.MENotificationAgent.bundle")
+	(subpath "System/Library/Frameworks/MediaExtension.framework")
+)
+
+;; allow access to LaunchServices and UserNotification daemons
+(allow mach-lookup
+	(global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.lsd.modifydb")
+    (global-name "com.apple.usernotifications.listener")
+)
+
+;; allow reading of user notification preferences
+(allow user-preference-read (preference-domain "kCFPreferencesAnyApplication"))
+
+;; allow reading and writing of our temp and cache directories
+(if (positive? (string-length (param "DARWIN_COREMEDIA_CACHE_DIR")))
+	(allow file-write* file-read* (subpath (param "DARWIN_COREMEDIA_CACHE_DIR"))))
+
+(if (positive? (string-length (param "DARWIN_COREMEDIA_TEMP_DIR")))
+	(allow file-write* file-read* (subpath (param "DARWIN_COREMEDIA_TEMP_DIR"))))
+

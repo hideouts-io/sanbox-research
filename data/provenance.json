@@ -1,7 +1,7 @@
 {
   "origin": {
-    "catalogSHA256": "f8bc71369b4f0e873c3ec612660396e752e3795a34094780340de637938fd79c",
-    "generatedAt": "2026-10-19T07:28:05.763438+00:00",
+    "catalogSHA256": "4b818ab97aaae147ec06526cc65bca840a2a47b39f5659676687cfdc42a2e174",
+    "generatedAt": "2026-11-02T03:36:15.573399+00:00",
     "generator": {
       "name": "SandboxLens baseline manifest generator",
       "path": "scripts/build_baseline_manifest.py",
@@ -181,6 +181,14 @@
         "manifestFormat": "sandbox-profile-path-sha256-v1",
         "manifestSHA256": "e51319823df22f277659a6cd476622c86828c6abbbb37def4c80da1acc2eaccc",
         "snapshotID": "macos-27.0-26A428",
+        "sourceRevision": null,
+        "sourceURL": null
+      },
+      {
+        "kind": "saved-tree-manifest",
+        "manifestFormat": "sandbox-profile-path-sha256-v1",
+        "manifestSHA256": "725dc20b015518d375a9aaf5494b5fc91b0d3ffafad672a386895fc11a90d575",
+        "snapshotID": "macos-27.2-26B123",
         "sourceRevision": null,
         "sourceURL": null
       },
@@ -645,6 +653,27 @@
         "Source path set, dereferenced byte hashes, sizes and symbolic-link targets matched independent inventories before and after copying; this is a point-in-time consistency check, not atomic acquisition or proof of authenticity.",
         "Release channel is unknown; the capture script stable default was corrected before catalog generation.",
         "Acquisition time is the local UTC clock observation, not independent timestamp attestation. Private raw files, host inventories and independently retained saved-tree manifests remain outside this repository.",
+        "Saved-byte consistency and derived textual markers do not establish Apple authenticity, safety, loaded policy, effective authorization or runtime behavior."
+      ],
+      "roots": [
+        "System/Library/Sandbox/Profiles",
+        "usr/share/sandbox"
+      ],
+      "sourceKind": "local-capture"
+    },
+    {
+      "architecture": "arm64",
+      "attribution": "declared-unverified",
+      "collectedAt": "2026-11-02T03:35:22.508718+00:00",
+      "coverage": "recorded-paths-only",
+      "evidence": [],
+      "id": "macos-27.2-26B123",
+      "limitations": [
+        "Product version 27.2, build 26B123 and arm64 were observed locally with sw_vers and uname during acquisition; no independent immutable Apple host attestation was obtained.",
+        "Only .sb paths under the two standard profile roots were recorded. Other sandbox policy locations, compiled policies and effective process policies are outside this capture.",
+        "Source path set, dereferenced byte hashes, sizes and symbolic-link targets matched independent inventories before and after copying; this is a point-in-time consistency check, not atomic acquisition or proof of authenticity.",
+        "Release channel is unknown; no stable or beta declaration is inferred from the version or build string.",
+        "Acquisition time is the local UTC clock observation, not independent timestamp attestation. Private host inventories and acquisition reports remain outside the public collection.",
         "Saved-byte consistency and derived textual markers do not establish Apple authenticity, safety, loaded policy, effective authorization or runtime behavior."
       ],
       "roots": [

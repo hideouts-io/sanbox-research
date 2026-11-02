@@ -1,0 +1,175 @@
+;;; Copyright (c) 2025 Apple Inc.  All Rights reserved.
+
+(version 1)
+
+(deny default)
+(deny file-map-executable iokit-get-properties process-info* nvram*)
+(deny dynamic-code-generation)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+
+(allow process-info* (target self))
+
+(allow process-info-pidinfo)
+
+(allow device-camera)
+
+(allow file-read-data)
+
+(allow file-read-metadata)
+
+(allow file-read*
+    (subpath "/private/var/db/ExtensibleSSO/Configuration"))
+
+(allow file-read* file-write*
+    (regex #"^(/private)?/var/folders/[^/]+/[^/]+/[^/]+/com\.apple\.PlatformSSOUIAgent($|/)"))
+
+;; Read/write access to change legacy keychain password
+(allow file-read* file-write*
+    (home-subpath "/Library/Keychains/"))
+
+(allow file-read*
+    (home-subpath "/Library/Avatar")
+    (home-subpath "/Library/Caches/com.apple.AvatarUI"))
+
+(allow file-read* file-write*
+    (home-subpath "/Library/Caches/com.apple.AvatarKit"))
+
+(allow iokit-get-properties)
+
+(allow iokit-open
+    (iokit-user-client-class "IOHIDParamUserClient")
+    (iokit-user-client-class "RootDomainUserClient")
+    (iokit-user-client-class "AppleKeyStoreUserClient")
+    (iokit-user-client-class "IOSurfaceRootUserClient")
+    (iokit-user-client-class "AppleNVMeEANUC")
+    (iokit-user-client-class "AGXDeviceUserClient")
+    (iokit-user-client-class "IOSurfaceAcceleratorClient")
+    (iokit-user-client-class "IOUSBDeviceUserClientV2")
+    (iokit-user-client-class "IOUSBInterfaceUserClientV2")
+    (iokit-user-client-class "AppleVideoToolboxParavirtualizationUserClient"))
+
+(allow mach-issue-extension
+     (extension-class "com.apple.webkit.extension.mach"))
+
+(allow generic-issue-extension
+     (extension-class "com.apple.webkit.mach-bootstrap"))
+
+(allow mach-lookup (global-name
+    "com.apple.ak.authorizationservices.xpc"
+    "com.apple.applekeystored"
+    "com.apple.AppSSO.service-xpc"
+    "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent"
+    "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent.login"
+    "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent.login.non-launching"
+    "com.apple.avatar.service"
+    "com.apple.avatar.support"
+    "com.apple.CARenderServer"
+    "com.apple.cmio.registerassistantservice"
+    "com.apple.cmio.registerassistantservice.system-extensions"
+    "com.apple.CoreAuthentication.agent"
+    "com.apple.CoreAuthentication.agent.libxpc"
+    "com.apple.CoreAuthentication.daemon"
+    "com.apple.CoreAuthentication.daemon.libxpc"
+    "com.apple.CoreAuthentication.daemon.EndpointProvider"
+    "com.apple.CryptoTokenKit.AuthenticationHintsProvider.daemon.libxpc"
+    "com.apple.CryptoTokenKit.AuthenticationHintsProvider.agent.libxpc"
+    "com.apple.LocalAuthentication.AuthenticationHintsProvider"
+    "com.apple.AutoUnlock.System.AuthenticationHintsProvider"
+    "com.apple.PlatformSSO.daemon-xpc"
+    "com.apple.PlatformSSO.login.service-xpc"
+    "com.apple.PlatformSSO.service-xpc"
+    "com.apple.PowerManagement.control"
+    "com.apple.SecurityServer"
+    "com.apple.softwareupdated.OSUpdate"
+    "com.apple.backboard.hid-services.xpc"
+    "com.apple.biome.access.user"
+    "com.apple.coreservices.appleevents"
+    "com.apple.coreservices.launchservicesd"
+    "com.apple.ctkd.token-client"
+    "com.apple.cvmsServ"
+    "com.apple.dock.fullscreen"
+    "com.apple.dock.server"
+    "com.apple.fonts"
+    "com.apple.iconservices"
+    "com.apple.inputanalyticsd"
+    "com.apple.iohideventsystem"
+    "com.apple.lsd.mapdb"
+    "com.apple.lsd.modifydb"
+    "com.apple.mobile.keybagd.xpc"
+    "com.apple.pasteboard.1"
+    "com.apple.pluginkit.pkd"
+    "com.apple.securityd.general"
+    "com.apple.securityd.xpc"
+    "com.apple.system.opendirectoryd.api"
+    "com.apple.tccd"
+    "com.apple.tccd.system"
+    "com.apple.tsm.uiserver"
+    "com.apple.uiintelligencesupport.agent"
+    "com.apple.webprivacyd"
+    "com.apple.window_proxies"
+    "com.apple.windowmanager.server"
+    "com.apple.windowserver.active"))
+
+(allow user-preference* (preference-domain
+    "com.apple.PlatformSSO"))
+
+(allow user-preference-read user-preference-write
+      (preference-domain "com.apple.security")
+      (preference-domain "com.apple.PlatformSSO.PlatformSSOUIAgent")
+      (preference-domain "com.apple.security.smartcard")
+      (preference-domain "com.apple.security.tokenlogin"))
+
+(allow user-preference-read
+      (preference-domain "com.apple.Accessibility")
+      (preference-domain "com.apple.CoreGraphics")
+      (preference-domain "com.apple.Metal")
+      (preference-domain "com.apple.SwiftUI")
+      (preference-domain "com.apple.UIKit")
+      (preference-domain "com.apple.WebKit")
+      (preference-domain "com.apple.avfoundation")
+      (preference-domain "com.apple.coreanimation")
+      (preference-domain "com.apple.coreaudio")
+      (preference-domain "com.apple.coreimage")
+      (preference-domain "com.apple.coremedia")
+      (preference-domain "com.apple.corevideo")
+      (preference-domain "com.apple.gpu")
+      (preference-domain "com.apple.hitoolbox")
+      (preference-domain "com.apple.opengl"))
+
+(with-filter (extension "com.apple.app-sandbox.read")
+    (allow file-read*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read")))
+(with-filter (extension "com.apple.app-sandbox.read-write")
+    (allow file-read* file-write*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")))
+
+;; read/write cache access
+(let ((agent-path-filter (subpath (param "APP_BUNDLE_PATH"))))
+    (allow file-read* agent-path-filter)
+    (allow file-issue-extension
+        (require-all
+            (extension-class "com.apple.app-sandbox.read")
+            agent-path-filter)))
+
+;; Allow font asset access
+(allow file-issue-extension
+    (require-all
+        (extension-class "com.apple.app-sandbox.read")
+        (subpath "/System/Library/AssetsV2")))
+
+(allow system-audit)

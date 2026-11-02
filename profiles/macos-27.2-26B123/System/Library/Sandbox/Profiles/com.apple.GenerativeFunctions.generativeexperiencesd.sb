@@ -1,0 +1,264 @@
+
+;;; Copyright (c) 2021 Apple Inc. All Rights reserved.
+(version 1)
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+(deny mach-priv-host-port)
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+;;; Homedir-relative path filters
+(define (home-regex home-relative-regex)
+    (regex (string-append "^" (regex-quote (param "HOME")) home-relative-regex)))
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+(define (home-prefix home-relative-prefix)
+    (prefix (string-append (param "HOME") home-relative-prefix)))
+(define (home-literal home-relative-literal)
+    (literal (string-append (param "HOME") home-relative-literal)))
+(allow process-info* (target self))
+(allow process-info-dirtycontrol (target self))
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+;; For validating the entitlements of clients.
+(allow process-info-codesignature)
+;; Your preference domain
+(allow user-preference-read user-preference-write
+       (preference-domain "com.apple.sage")
+       (preference-domain "com.apple.GenerativeFunctions.GenerativeFunctionsInstrumentation")
+       (preference-domain "com.apple.generativeexperiences.corefollowup")
+)
+(allow user-preference-read user-preference-write
+       (preference-domain "com.apple.intelligenceplatform"))
+(allow user-preference-read
+       (preference-domain "com.apple.SummarizationKit")
+       (preference-domain "com.apple.EmojiPreferences")
+       (preference-domain "com.apple.AppSupport")
+       (preference-domain "com.apple.Accessibility")
+)
+(allow managed-preference-read (preference-domain "kCFPreferencesAnyApplication"))
+(allow mach-lookup
+    (global-name "com.apple.SetStoreUpdateService")
+    (global-name "com.apple.biome.access.user")
+    (global-name "com.apple.biome.access.system")
+    (global-name "com.apple.biome.compute.publisher.service")
+    (global-name "com.apple.biome.compute.publisher.service.user")
+    (global-name "com.apple.biome.compute.source")
+    (global-name "com.apple.biome.compute.source.user")
+    (global-name "com.apple.dock.server")
+    (global-name "com.apple.duetactivityscheduler")
+    (global-name "com.apple.intelligenceflow.context")
+    (global-name "com.apple.intelligenceplatform.EntityResolution")
+    (global-name "com.apple.intelligenceplatform.Knosis")
+    (global-name "com.apple.intelligenceplatform.View")
+    (global-name "com.apple.lsd.mapdb")
+    (global-name "com.apple.modelmanager")
+    (global-name "com.apple.PerfPowerTelemetryClientRegistrationService")
+    (global-name "com.apple.powerlog.plxpclogger.xpc")
+    (global-name "com.apple.ind.cloudfeatures")
+    (global-name "com.apple.ind.xpc")
+    (global-name "com.apple.corefollowup.agent")
+    (global-name "com.apple.generativeexperiences.generativeexperiencessession")
+    (global-name "com.apple.generativeexperiences.corefollowup")
+    (global-name "com.apple.nsurlsessiond")
+    (global-name "com.apple.containermanagerd")
+    (global-name "com.apple.timed.xpc")
+    (global-name "com.apple.tccd")
+    (global-name "com.apple.tccd.system")
+    (global-name "com.apple.windowserver.active")
+    (global-name "com.apple.securityd")
+    (global-name "com.apple.generativesearch.server.search")
+)
+;; Read/write access to a temporary directory.
+(allow file-read* file-write*
+       (subpath (param "TMPDIR"))
+       (subpath (param "DARWIN_CACHE_DIR"))
+       (mount-relative-literal "/.TemporaryItems")
+       (mount-relative-regex #"^/\.TemporaryItems/folders.[0-9]+(/|$)")
+       (home-subpath "/Library/Caches/com.apple.proactive.eventtracker") ;; PET 2.0
+       (home-subpath "/Library/Caches/com.apple.nsurlsessiond/Downloads/com.apple.GenerativeFunctions.generativeexperiencesd") ;; NSURLSession background downloads
+       (home-subpath "/Library/AppleIntelligencePlatform/") ;; AgentSessionKit database and related files
+)
+;; Required by Metal (125737511)
+(allow file-read* file-write*
+       (home-subpath "/Library/Caches/com.apple.GenerativeFunctions.generativeexperiencesd/")
+)
+;; ModelCatalog, UnifiedAssets, and MobileAssets
+(allow mach-lookup
+    (global-name "com.apple.modelcatalog.catalog")
+    (global-name "com.apple.mobileasset.autoasset")
+    (global-name "com.apple.mobileassetd.v2")
+    (global-name "com.apple.siri.uaf.service")
+    (global-name "com.apple.siri.analytics.assistant")
+    (global-name "com.apple.siri.uaf.subscription.service")
+)
+;; DeviceConfiguration: reach the agent that vends the effective
+;; com.apple.modelcatalog config used to enforce MDM restrictions on use
+;; cases (e.g. allowVisualIntelligence). Radar 182133249 (macOS regression
+;; of 179383846: entitlement-only grant was not enough under the macOS .sb).
+(allow mach-lookup
+    (global-name "com.apple.DeviceConfigurationAgent.consumer")
+    (global-name "com.apple.DeviceConfigurationAgent.consumer.async")
+    (global-name "com.apple.DeviceConfigurationAgent.publisher")
+)
+(allow file-read*
+    (subpath "/private/var/run/MobileAssetStartupActivation.doneThisBoot")
+    (subpath "/private/var/db/com.apple.modelcatalog/sideload/")
+    (subpath "/System/Library/AssetsV2/locks/com.apple.UnifiedAssetFramework/")
+    (subpath "/System/Library/UnifiedAssetFramework/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_FM_GenerativeModels/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_FM_Overrides/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_IF_Planner/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_IF_PlannerOverrides/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_FM_Visual/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_SummarizationKitConfiguration/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_CN_Guardrail/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_Siri_DialogAssets/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_Siri_UnderstandingASRHammer/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_Siri_FindMyConfigurationFiles/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_Siri_UnderstandingNLOverrides/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_Siri_TextToSpeech/purpose_auto/")
+    (subpath "/System/Library/AssetsV2/com_apple_MobileAsset_UAF_Siri_Understanding/purpose_auto/")
+    (subpath "/System/Library/PreinstalledAssetsV2/RequiredByOs/com_apple_MobileAsset_UAF_FM_GenerativeModels/")
+    (subpath "/System/Library/PreinstalledAssetsV2/RequiredByOs/com_apple_MobileAsset_UAF_FM_Overrides/")
+    ;; Unhiding Generative Playground
+    (subpath "/System/Applications/Image Playground.app")
+    ;; Required to read UAF Subscriptions
+    (home-subpath "/Library/UnifiedAssetFramework/")
+    ;; Montara IP Country Code Cache
+    (subpath "/private/var/db/com.apple.countryd/")
+    ;; AIR processing, and the assetDeliveryReady check
+    (subpath "/private/var/db/assetsubscriptiond/")
+    ;; Read os_eligibility domains CALIFORNIUM and NOBELIUM
+    (literal "/private/var/db/os_eligibility/eligibility.plist")
+)
+;; Shortcuts/ToolKit database access for ExternalProviderService
+(allow file-read* file-write*
+    (subpath (string-append (param "HOME") "/Library/Shortcuts"))
+)
+(allow mach-lookup
+    (global-name "com.apple.siri.VoiceShortcuts"))
+(allow user-preference-read
+    (preference-domain "com.apple.SoftwareUpdate")
+    (preference-domain "com.apple.UnifiedAssetFramework")
+    (preference-domain "com.apple.modelcatalog.ajax")
+    (preference-domain "com.apple.applicationaccess")
+)
+;; Availability State
+(allow user-preference-read user-preference-write
+       (preference-domain "com.apple.gms.availability")
+       (preference-domain "kCFPreferencesAnyApplication")
+       (preference-domain "com.apple.appleintelligencereporting")
+)
+;; Allow read-write of AppleIntelligencePlatform (rdar:
+(allow file-read* file-write*
+       (subpath "/private/var/db/AppleIntelligencePlatform")
+)
+;; Allow issuing extensions to cfprefsd for AppleIntelligencePlatform (rdar:
+(allow file-issue-extension
+    (require-all
+        (extension-class "com.apple.cfprefsd.read-write")
+        (subpath "/private/var/db/AppleIntelligencePlatform")
+    )
+    (require-all
+        (extension-class "com.apple.cfprefsd.read")
+        (subpath "/private/var/db/AppleIntelligencePlatform")
+    )
+)
+;; rdar:
+;; GenerativePartnerService.ExternalProviderService. Without these rules, the AMS
+;; Metrics SQLite DB + backup-exclusion setxattr fail (NSPOSIXErrorDomain 1),
+;; AMSMetricsFigaroFlushTask's KeepAlive leaks, and ged stays dirty.
+;; Exceptions below replicate the AMS entitlement mapping from AppSandbox/frameworks.sb.
+(allow file-issue-extension
+    (regex #"/Library/Caches/com\.apple\.AppleMediaServices"))
+(allow mach-lookup
+    (global-name "com.apple.CoreAuthentication.agent"
+                 "com.apple.adid"
+                 "com.apple.amsprivateidentifiers"
+                 "com.apple.commerce"
+                 "com.apple.fairplayd"
+                 "com.apple.fpsd"
+                 "com.apple.usernotifications.listener"
+                 "com.apple.usernotifications.usernotificationservice"
+                 "com.apple.xpc.amsaccountsd"
+                 "com.apple.xpc.amstoold"))
+(allow file-read* file-write*
+    (home-subpath "/Library/AppleMediaServices")
+    (home-subpath "/Library/Caches/com.apple.AppleMediaServices")
+    (home-subpath "/Library/Logs/com.apple.StoreServices"))
+(allow file-read*
+    (literal "/Library/Application Support/CrashReporter/DiagnosticMessagesHistory.plist"))
+(allow user-preference*
+    (preference-domain "com.apple.AppleMediaServices")
+    (preference-domain "com.apple.AppleMediaServices.notbackedup")
+    (preference-domain "com.apple.commerce"))
+(allow mach-lookup
+    (global-name "com.apple.accountsd.accountmanager")
+    ;; Unhiding Generative Playground
+    (global-name "com.apple.lsd.modifydb")
+    ;; Photos library access
+    (global-name "com.apple.photos.service")
+)
+(allow mach-lookup
+    (global-name "com.apple.assistant.settings")
+    (global-name "com.apple.private.assistant.settings")
+)
+(allow mach-lookup
+    (global-name "com.apple.generativeexperiences.generativeexperiencessession")
+    (global-name "com.apple.familycircle.agent")
+)
+(allow mach-lookup
+    ;; External Partner Credential Storage
+    (global-name "com.apple.securityd.systemkeychain")
+)
+(allow mach-lookup
+    ;; AppleIntelligenceReportingProcessing
+    (global-name "com.apple.appleintelligencereporting.processing")
+)
+(allow mach-lookup
+    ;; PQA Indexing Readiness
+    (global-name "com.apple.spotlightknowledged")
+)
+(allow user-preference-read
+       (preference-domain "com.apple.assistant.backedup")
+       (preference-domain "com.apple.assistant.public")
+       (preference-domain "com.apple.assistant.support")
+       (preference-domain "com.apple.CloudSubscriptionFeatures")
+       (preference-domain "com.apple.CloudSubscriptionFeatures.ticket.cache")
+       (preference-domain "com.apple.CloudSubscriptionFeatures.cache")
+       (preference-domain "com.apple.csf.gm.bypass")
+       (preference-domain "com.apple.icloud.gm")
+       (preference-domain "com.apple.CloudSubscriptionFeatures.followup.engagement")
+       (preference-domain "com.apple.CloudSubscriptionFeatures.gm.bypass")
+       (preference-domain "com.apple.CloudSubscriptionFeatures.gmCache")
+       (preference-domain "com.apple.CloudSubscriptionFeatures.gmBypass")
+       (preference-domain "com.apple.CloudSubscriptionFeatures.waitlist")
+       (preference-domain "com.apple.icloud.gm")
+)
+(allow user-preference-read user-preference-write
+       (preference-domain "com.apple.CloudSubscriptionFeatures.optIn")
+       (preference-domain "com.apple.CloudSubscriptionFeatures.gmBypass")
+       (preference-domain "com.apple.generativepartnerservicesettings")
+       (preference-domain "com.apple.siri.generativeassistantsettings")
+)
+;; Consume sandbox extensions
+(with-filter (extension "com.apple.app-sandbox.read")
+    (allow file-read*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read")))
+(with-filter (extension "com.apple.app-sandbox.read-write")
+    (allow file-read* file-write*)
+    (allow file-issue-extension (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")))
+(allow iokit-open
+    (iokit-user-client-class "AppleKeyStoreUserClient"))
+;; Temporary until rdar:
+(allow mach-lookup
+    (global-name-prefix "com.apple.private.GenerativeAgentsTransport.runtime."))
+(allow mach-lookup
+    (xpc-service-name-prefix "com.apple.private.GenerativeAgentsTransport.runtime."))
+;; CloudKit sync
+(allow mach-lookup
+    (global-name "com.apple.cloudd")
+    (global-name "com.apple.apsd")
+)

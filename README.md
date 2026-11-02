@@ -1,6 +1,6 @@
 # sanbox-research
 
-A public research collection of **23 saved macOS sandbox-profile snapshots**, containing **5,953 recorded `.sb` paths** and **23,561,532 bytes**. This publishes every snapshot currently retained in the SandboxLens reference collection, spanning declared versions 10.9.5 through 27.2 with substantial gaps. It does not cover every macOS release or every policy location.
+A public research collection of **24 saved macOS sandbox-profile snapshots**, containing **6,564 recorded `.sb` paths** and **26,394,550 bytes**. This publishes every snapshot currently retained in the SandboxLens reference collection, spanning declared versions 10.9.5 through 27.2 with substantial gaps. It does not cover every macOS release or every policy location.
 
 ## Browse the profiles
 
@@ -29,6 +29,7 @@ A public research collection of **23 saved macOS sandbox-profile snapshots**, co
 | [26.7](profiles/macos-26.7-25G229/) | `25G229` | 570 | declared-unverified |
 | [27.0](profiles/macos-27.0-26A428/) | `26A428` | 610 | declared-unverified |
 | [27.2](profiles/macos-27.2-26B5112a/) | `26B5112a` | 611 | declared-unverified |
+| [27.2](profiles/macos-27.2-26B123/) | `26B123` | 611 | declared-unverified |
 
 Each snapshot preserves the installed-relative path:
 
@@ -51,13 +52,13 @@ After cloning, verify the complete collection from the repository root:
 shasum -a 256 -c SHA256SUMS
 ```
 
-All 24 original symlink entries are published as regular `.sb` files containing their verified dereferenced bytes. Original targets remain recorded in the catalog. Profile bytes and embedded notices are preserved without modification.
+All 30 original symlink entries are published as regular `.sb` files containing their verified dereferenced bytes. Original targets remain recorded in the catalog. Profile bytes and embedded notices are preserved without modification.
 
 ## Interpretation limits
 
-Version, build, and channel labels are source declarations, not independently authenticated Apple identities. Eighteen snapshots came from pinned community revisions, one from a community report, and four from saved local captures. All snapshots describe recorded paths only.
+Version, build, and channel labels are source declarations, not independently authenticated Apple identities. Eighteen snapshots came from pinned community revisions, one from a community report, and five from saved local captures. All snapshots describe recorded paths only.
 
-The Monterey snapshot retains its original `macos-12.6-21G115` identifier, but the source also reports 12.5 / 21G72; its exact profile build remains unresolved. The first three local captures have an unverified `stable` channel declaration; the 27.2 capture records an unknown channel. Big Sur, Ventura, Sonoma, Sequoia, and most intervening point releases are absent.
+The Monterey snapshot retains its original `macos-12.6-21G115` identifier, but the source also reports 12.5 / 21G72; its exact profile build remains unresolved. The first three local captures have an unverified `stable` channel declaration; both 27.2 captures record an unknown channel. Big Sur, Ventura, Sonoma, Sequoia, and most intervening point releases are absent.
 
 Static policy text, declared entitlements, loaded policy, and observed runtime behavior are separate evidence. No policy execution or runtime authorization is established by this collection. A textual allow/deny count is not an effective-permission verdict. Private acquisition reports, host inventories, app acceptance logs, and credentials are outside this publication. Profile text retains historical comments and literal paths from its sources.
 

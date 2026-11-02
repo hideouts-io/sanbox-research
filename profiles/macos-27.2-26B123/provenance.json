@@ -1,0 +1,21 @@
+{
+  "architecture": "arm64",
+  "attribution": "declared-unverified",
+  "collectedAt": "2026-11-02T03:35:22.508718+00:00",
+  "coverage": "recorded-paths-only",
+  "evidence": [],
+  "id": "macos-27.2-26B123",
+  "limitations": [
+    "Product version 27.2, build 26B123 and arm64 were observed locally with sw_vers and uname during acquisition; no independent immutable Apple host attestation was obtained.",
+    "Only .sb paths under the two standard profile roots were recorded. Other sandbox policy locations, compiled policies and effective process policies are outside this capture.",
+    "Source path set, dereferenced byte hashes, sizes and symbolic-link targets matched independent inventories before and after copying; this is a point-in-time consistency check, not atomic acquisition or proof of authenticity.",
+    "Release channel is unknown; no stable or beta declaration is inferred from the version or build string.",
+    "Acquisition time is the local UTC clock observation, not independent timestamp attestation. Private host inventories and acquisition reports remain outside the public collection.",
+    "Saved-byte consistency and derived textual markers do not establish Apple authenticity, safety, loaded policy, effective authorization or runtime behavior."
+  ],
+  "roots": [
+    "System/Library/Sandbox/Profiles",
+    "usr/share/sandbox"
+  ],
+  "sourceKind": "local-capture"
+}

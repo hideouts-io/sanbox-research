@@ -1,0 +1,68 @@
+;;
+;;  coreidvd.sb
+;;  CoreIDV
+;;
+;;  Copyright © 2025 Apple Inc. All rights reserved.
+;;
+;;  WARNING: The sandbox rules in this file currently
+;;  constitute Apple System Private Interface and are
+;;  subject to change at any time and without notice.
+;;
+
+(version 1)
+
+(deny default)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(allow file-read-metadata)
+
+(allow network-outbound)
+(system-network)
+
+(allow process-info-pidinfo)
+(allow process-info* (target self))
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "HOME") home-relative-subpath)))
+
+(allow file-read*
+    (literal
+        "/Library/Application Support/CrashReporter/DiagnosticMessagesHistory.plist"
+        "/Library/Preferences/SystemConfiguration/preferences.plist"
+        "/usr/libexec"
+        "/usr/libexec/coreidvd"))
+
+(allow user-preference-read
+    (preference-domain
+        "kCFPreferencesAnyApplication"))
+
+(allow user-preference-read user-preference-write
+    (preference-domain
+        "com.apple.coreidv.coreidvd"
+        "com.apple.coreidv.public"
+        "group.com.apple.coreidv.coreidvd"))
+
+(allow file-read* file-write*
+    (home-subpath "/Library/Group Containers/group.com.apple.coreidv.coreidvd")
+    (home-subpath "/Library/HTTPStorages/com.apple.coreidv.coreidvd")
+    (subpath
+        (param "DARWIN_CACHE_DIR")
+        (param "TMPDIR")))
+
+(let ((cache-path-filter (home-subpath "/Library/Caches/com.apple.coreidv.coreidvd")))
+    (allow file-read* file-write* cache-path-filter)
+    (allow file-issue-extension
+        (require-all
+            (extension-class "com.apple.app-sandbox.read" "com.apple.app-sandbox.read-write")
+            cache-path-filter)))
+
+(allow mach-lookup
+    (global-name
+        "com.apple.bluetooth.xpc"
+        "com.apple.containermanagerd"
+        "com.apple.identityservicesd.desktop.auth"
+        "com.apple.server.bluetooth.le.att.xpc"
+        "com.apple.SystemConfiguration.configd"))

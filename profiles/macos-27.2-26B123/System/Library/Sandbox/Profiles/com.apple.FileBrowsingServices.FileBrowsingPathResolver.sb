@@ -1,0 +1,66 @@
+;;; Copyright (c) 2026 Apple Inc.  All Rights Reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+;;; FileBrowsingPathResolver — embedded XPC service inside
+;;; FileBrowsingServices.framework. Resolves URLs to FileBrowsing.Path
+;;; values via FINode; read-only file access, no writes.
+;;;
+;;; Modeled on ArchiveService/ArchiveService-macOS.sb;
+;;; Trimmed for the read-only path-resolution use case.
+;;; Security review expected to tighten / loosen as needed.
+;;;
+(version 1)
+
+(deny default)
+(deny file-map-executable process-info* nvram*)
+(deny dynamic-code-generation)
+(deny mach-priv-host-port)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(allow process-info* (target self))
+
+;; Preference domains FINode + DSPriv internals read.
+(allow user-preference-read
+       (preference-domain "com.apple.desktopservices.FileBrowsingPathResolver")
+       (preference-domain "com.apple.finder")
+       (preference-domain "com.apple.iclouddrive.features"))
+;; .GlobalPreferences alias
+(allow user-preference-read (preference-domain "kCFPreferencesAnyApplication"))
+
+;; Mach services DSPriv / FINode reach during path resolution.
+(allow mach-lookup
+       (global-name "com.apple.FileCoordination"
+                    "com.apple.FileProvider"
+                    "com.apple.lsd.mapdb"
+                    "com.apple.coreservices.launchservicesd"
+                    "com.apple.coreservices.quarantine-resolver"
+                    "com.apple.securityd.xpc"
+                    "com.apple.bird"
+                    "com.apple.containermanagerd"
+                    "com.apple.fileproviderd"))
+
+;; symlink resolution, realpath(3), etc.
+(allow file-read-metadata)
+
+;; Read access to user-issued sandbox extensions (so callers can pass
+;; URLs they have access to). No writes — FBS does not mutate paths.
+(allow file-read* (extension "com.apple.app-sandbox.read"))
+(allow file-read* (extension "com.apple.app-sandbox.read-write"))
+
+;; Read access to paths vended via app-group extension.
+(allow file-read* (extension "com.apple.sandbox.application-group"))
+
+;; FS query ioctls FINode uses (e.g. clone info, hotfile state).
+(allow system-fsctl
+       (fsctl-command APFSIOC_GET_CLONE_INFO))
+
+;; Generic broad read across the user's accessible filesystem so
+;; FINode.fiNodeFromURL succeeds on URLs handed to us. Security review
+;; may want to tighten this once we have a workload profile.
+(allow file-read* file-read-metadata)

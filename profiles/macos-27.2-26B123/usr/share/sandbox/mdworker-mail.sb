@@ -1,0 +1,36 @@
+;;;
+;;; Sandbox profile for mdworker_shared (Spotlight file metadata server worker)
+;;; used when hosting Mail.mdimporter
+;;;
+;;; /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mdworker_shared
+;;;     /System/Library/Spotlight/Mail.mdimporter
+;;;
+;;; Copyright (c) 2006–2026 Apple Inc. All Rights reserved.
+;;;
+;;; WARNING: The sandbox rules in this file currently constitute
+;;; Apple System Private Interface and are subject to change at any time and
+;;; without notice.
+;;;
+
+(version 1)
+
+(import "mdworker.sb")
+
+;; Read access to contents of .../Library/Mail located anywhere
+(allow file-read* (regex #"/Library/Mail(/|$)"))
+
+;; Read access to sibling detached MIME part bodies located anywhere
+(allow file-read* (regex #"\.emlxpart$"))
+
+;; Read access to ~/Library resolved to a path not named .../Library (e.g., through symlink)
+(if (positive? (string-length (param "_LIBRARY")))
+    (begin
+        (allow file-read* (param-subpath "_LIBRARY" "/Mail"))))
+
+;; Read access to ~/Library/Mail resolved to a path not containing /Library/Mail
+(if (positive? (string-length (param "_MAIL")))
+    (begin
+        (allow file-read* (subpath (param "_MAIL")))))
+
+;; Access to accountsd for account and mailbox identifiers
+(allow mach-lookup (global-name "com.apple.accountsd.accountmanager"))

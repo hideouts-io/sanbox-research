@@ -1,0 +1,81 @@
+(version 1)
+
+(deny default)
+(deny file-map-executable iokit-get-properties process-info* nvram*)
+(deny dynamic-code-generation)
+
+(import "system.sb")
+(import "com.apple.corefoundation.sb")
+(corefoundation)
+
+(define (home-subpath home-relative-subpath)
+    (subpath (string-append (param "_HOME") home-relative-subpath)))
+
+(allow process-info* (target self))
+
+;; XPC peer introspection — main-acme.m calls `xpc_connection_get_pid(peer)`
+;; on incoming connections for `secdebug` pid logging (entitlement check uses
+;; the audit token via SecXPCCallerHasNetworkEntitlement, not pidinfo).
+(allow process-info-pidinfo)
+
+;; For resolving symlinks, realpath(3), and equivalents.
+(allow file-read-metadata)
+
+;; Read/write access to a temporary directory.
+(allow file-read* file-write*
+    (subpath (param "_TMPDIR"))
+    (subpath (param "_DARWIN_CACHE_DIR"))
+)
+
+;; Read access for preferences
+(allow file-read*
+    (subpath "/Library/Preferences/")
+)
+
+(allow user-preference-read
+    (preference-domain "kCFPreferencesAnyApplication")
+)
+
+(allow ipc-posix-shm
+	(ipc-posix-name "com.apple.AppleDatabaseChanged")
+)
+
+;; --------------------------------------------------------------------------
+;; Network egress. Per rdar://177979759, ephemeral NSURLSession makes
+;; connections in-process — the XPC service's own profile governs every
+;; socket it opens.
+;;
+;; common.sb is iOS-only — its `(network-client (remote tcp))` macro would
+;; have expanded to `(allow-network-common)` + the TCP filter + a few more
+;; mach-lookups (com.apple.networkd etc.). On macOS we inline the subset of
+;; that expansion that CFNetwork actually exercises for an outbound HTTPS
+;; request — see Apple's imports/common.sb `(define-once (allow-network-common))`.
+;; This preserves the egress tightening (no arbitrary UDP, no raw sockets)
+;; while keeping the dependencies CFNetwork needs.
+;; --------------------------------------------------------------------------
+
+(allow network-outbound (remote tcp))            ;; HTTP/1.1, HTTP/2
+(allow network-outbound (remote udp "*:443"))    ;; QUIC / HTTP/3
+(allow network-outbound (literal "/private/var/run/mDNSResponder"))  ;; DNS Unix socket
+(allow system-socket
+    (require-all (socket-domain AF_SYSTEM) (socket-protocol 2)))     ;; SYSPROTO_CONTROL
+(allow system-socket (socket-domain AF_ROUTE))   ;; getifaddrs
+
+(allow mach-lookup
+    (global-name "com.apple.AppSSO.service-xpc")
+    ;; DNS resolution path:
+    (global-name "com.apple.dnssd.service")
+    ;; CFNetwork connection setup / VPN routing:
+    (global-name "com.apple.networkd")
+    ;; SystemConfiguration framework (CFNetwork dependency):
+    (global-name "com.apple.SystemConfiguration.configd")
+    ;; Network symptoms reporting (used by CFNetwork on failures):
+    (global-name "com.apple.symptomsd")
+    (global-name "com.apple.usymptomsd")
+    ;; TLS chain validation:
+    (global-name "com.apple.trustd")
+    (global-name "com.apple.trustd.agent"))
+
+;; networkd reads its config from this preference file.
+(allow file-read*
+    (literal "/private/var/preferences/com.apple.networkd.plist"))
